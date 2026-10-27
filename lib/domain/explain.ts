@@ -1,9 +1,11 @@
 import { chainName } from "@/lib/format/chain"
 import { formatAmount } from "@/lib/format/amount"
+import { formatDateUtc, formatTimeUtc } from "@/lib/format/date"
 
 import type { HardFailure } from "./evaluate"
 import { chainList, joinList } from "./rule-sentence"
-import type { Committed, PaymentRequest } from "./types"
+import { utcDayKey } from "./spend"
+import type { Committed, Decision, PaymentRequest } from "./types"
 
 /**
  * The plain-language core of a hard-rule failure, without a leading capital or
@@ -40,4 +42,36 @@ export function failureClause(
     case "review_threshold":
       throw new Error("A review threshold is not a hard rule")
   }
+}
+
+/**
+ * What happened in review, for the decision detail (design.md §6.2b), e.g.
+ * "Approved by M. Ilić at 12:14 UTC." Undefined for allow and deny, which
+ * never go to review. The date is added when the review was on a later day.
+ */
+export function reviewSentence(
+  decision: Pick<
+    Decision,
+    | "outcome"
+    | "reviewResult"
+    | "reviewedBy"
+    | "reviewedAt"
+    | "reviewReason"
+    | "decidedAt"
+  >,
+): string | undefined {
+  if (decision.outcome !== "review") return undefined
+  const { reviewResult, reviewedBy, reviewedAt, reviewReason } = decision
+  if (!reviewResult) return "Waiting for a reviewer."
+
+  const verb = reviewResult === "approved" ? "Approved" : "Rejected"
+  const by = reviewedBy ? ` by ${reviewedBy}` : ""
+  const when = reviewedAt
+    ? utcDayKey(reviewedAt) === utcDayKey(decision.decidedAt)
+      ? ` at ${formatTimeUtc(reviewedAt)}`
+      : ` on ${formatDateUtc(reviewedAt)} at ${formatTimeUtc(reviewedAt)}`
+    : ""
+  const reason =
+    reviewResult === "rejected" && reviewReason ? `: “${reviewReason}”` : "."
+  return `${verb}${by}${when}${reason}`
 }

@@ -58,3 +58,25 @@ export function formatAbsolute(iso: string, timeZone?: string): string {
 
   return `${utc} · ${sameDay ? localTime : `${localDate} ${localTime}`}`
 }
+
+const utcTime = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "UTC",
+})
+
+/** "14:02 UTC" */
+export function formatTimeUtc(iso: string): string {
+  return `${utcTime.format(new Date(iso))} UTC`
+}
+
+/** "18 Oct, 14:02 UTC", for headers where the day matters. */
+export function formatDateTimeUtc(iso: string): string {
+  return `${shortDate.format(new Date(iso))}, ${formatTimeUtc(iso)}`
+}
+
+/** "18 Oct" */
+export function formatDateUtc(iso: string): string {
+  return shortDate.format(new Date(iso))
+}

@@ -15,11 +15,14 @@ import {
   approvalsResponse,
   decisionDetailResponse,
   decisionsResponse,
+  jwksResponse,
   mandatesResponse,
   paymentDetailResponse,
   reviewResponse,
 } from "@/lib/api/contract"
 import { usdc } from "@/lib/format/amount"
+import { decodeVerdict } from "@/lib/verdict/decode"
+import { verifyVerdict } from "@/lib/verdict/verify"
 
 import { configureMocks, mockConfig } from "./config"
 import { resetDb } from "./db"
@@ -229,5 +232,78 @@ describe("held-back requests", () => {
     expect(
       items.filter((i) => i.request.id.startsWith("req_new")),
     ).toHaveLength(3)
+  })
+})
+
+describe("verdicts", () => {
+  it("publishes one public ES256 key", async () => {
+    const { keys } = await fetchJson("/api/jwks", jwksResponse)
+    expect(keys).toHaveLength(1)
+    expect(keys[0]).toMatchObject({ kty: "EC", crv: "P-256", alg: "ES256" })
+    expect(keys[0]).not.toHaveProperty("d")
+  })
+
+  it("signs every decision, and the claims match the decision", async () => {
+    const jwks = await fetchJson("/api/jwks", jwksResponse)
+    const items = await fetchJson("/api/decisions", decisionsResponse)
+    expect(items.length).toBeGreaterThan(170)
+
+    for (const { decision, request } of items) {
+      expect(await verifyVerdict(decision.verdictJwt, jwks)).toMatchObject({
+        ok: true,
+      })
+      expect(decodeVerdict(decision.verdictJwt).payload).toMatchObject({
+        decisionId: decision.id,
+        outcome: decision.outcome,
+        reasonCode: decision.reasonCode,
+        amount: request.amount.toString(),
+        mandateVersion: decision.mandateVersion,
+      })
+    }
+  })
+
+  it("signs held-back requests when they arrive", async () => {
+    const jwks = await fetchJson("/api/jwks", jwksResponse)
+    clock = anchor + 30_000
+    const arrived = (await queue()).find((i) =>
+      i.request.id.startsWith("req_new"),
+    )!
+    expect(
+      await verifyVerdict(arrived.decision.verdictJwt, jwks),
+    ).toMatchObject({ ok: true })
+  })
+
+  it("keeps the verdict unchanged after a review", async () => {
+    const [item] = await queue()
+    const result = await postJson(
+      `/api/decisions/${item!.decision.id}/approve`,
+      {},
+      reviewResponse,
+    )
+    expect(result.decision.verdictJwt).toBe(item!.decision.verdictJwt)
+  })
+})
+
+describe("decision detail", () => {
+  it("names the mandate that replaced the one applied", async () => {
+    const denied = await fetchJson(
+      "/api/decisions?outcome=deny&agentId=agt_ops",
+      decisionsResponse,
+    )
+    const underV2 = denied.find((d) => d.decision.mandateVersion === 2)!
+    const detail = await fetchJson(
+      `/api/decisions/${underV2.decision.id}`,
+      decisionDetailResponse,
+    )
+    expect(detail.mandate.version).toBe(2)
+    expect(detail.replacedBy?.version).toBe(3)
+
+    // Ops Agent v3 is current
+    const gpu = (await queue()).find((i) => i.request.amount === usdc("1250"))!
+    const current = await fetchJson(
+      `/api/decisions/${gpu.decision.id}`,
+      decisionDetailResponse,
+    )
+    expect(current.replacedBy).toBeUndefined()
   })
 })

@@ -32,6 +32,8 @@ type DataTableProps<T> = {
   empty?: React.ReactNode
   /** Shown instead of the table when set. */
   error?: React.ReactNode
+  /** Extra classes for every data row, e.g. "relative" for a stretched link. */
+  rowClassName?: string
   className?: string
 }
 
@@ -50,6 +52,7 @@ export function DataTable<T>({
   loading = false,
   empty,
   error,
+  rowClassName,
   className,
 }: DataTableProps<T>) {
   if (error) return <>{error}</>
@@ -113,6 +116,7 @@ export function DataTable<T>({
                     }
                     className={cn(
                       "h-9 border-t border-border outline-offset-[-2px]",
+                      rowClassName,
                       onRowSelect &&
                         "cursor-pointer hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-ring",
                       // Not colour alone: a left bar and aria-selected too

@@ -23,7 +23,6 @@ import {
   type SeedTime,
 } from "./fixtures"
 import { TX_SLOTS, type TxSlot } from "./tx-slots"
-import { unsignedVerdict } from "./verdict"
 
 export type SeedEntry = {
   request: PaymentRequest
@@ -184,17 +183,19 @@ export function decide(
     mandate,
     committed,
   )
-  const base = {
+  return {
     id: decisionId,
     requestId: request.id,
     mandateId: mandate.id,
     mandateVersion: mandate.version,
     outcome,
     reasonCode,
+    reason,
     ...(matchedRule && { matchedRule }),
+    // Signing is async (WebCrypto), so the mock db signs it (mocks/db.ts)
+    verdictJwt: "",
     decidedAt: request.createdAt,
   }
-  return { ...base, reason, verdictJwt: unsignedVerdict(base, request) }
 }
 
 function paymentFor(

@@ -199,3 +199,65 @@ Added under this rule in phase 1, following the standard Next.js + Vitest setup:
 **Trade-offs:**
 - The approvals query now polls every 10 s on **every page** while the tab is visible (`refetchIntervalInBackground: false`; TanStack Query pauses it when the tab is hidden).
 - Also in this phase: `@tanstack/react-table` is pinned to v8 as PLAN.md §2 says (`pnpm add` picked v9, which has a different API), and shadcn's `destructive` button variant is solid with white text, per design.md §3.3.
+
+---
+
+## D-015: Verdicts are signed with a per-load key whose kid is its thumbprint
+
+**Date:** 2026-10-27 · **Phase:** 4 (decisions + verdicts)
+
+**Decision:** The mock API generates an ES256 key pair with jose when its db is created (each page load), signs every decision with it (`mocks/db.ts`, `lib/verdict/sign.ts`), and publishes only the public half at `GET /api/jwks`. The `kid` is the key's RFC 7638 JWK thumbprint, not a fixed name. The browser verifies with `createLocalJWKSet` + `jwtVerify` (`lib/verdict/verify.ts`), which never throws: it returns `signature`, `unknown_key` or `malformed` with a plain-language message. This replaces the `alg: "none"` placeholder from D-009.
+
+**Why:**
+- No private key is ever committed (PLAN.md §2 security). The private key only lives in page memory, and `jwkSchema` strips anything but public members, so `d` can't leak through the JWKS.
+- A key-derived kid means a verdict from another load is reported as **unknown key**, not as a generic signature failure. A fixed `demo-1` would match the new key and fail the signature check, which reads as tampering.
+
+**Trade-offs:**
+- JWTs differ on every load, so one can't be pasted into jwt.io and verified against a stable key.
+- The mock signs ~200 verdicts at start, so `getDb()` is now async and the first response arrives a few ms later. Held-back requests are signed as they arrive; releases are serialised so concurrent requests can't release one twice.
+- The JWKS comes from the same mock that signs, so the demo proves the mechanism, not trust in an issuer. A real system would pin the issuer's JWKS URL.
+- One test (`main-nav.test.tsx`, fake timers) now waits for the first response before advancing the poll clock, because WebCrypto work isn't covered by fake timers.
+
+---
+
+## D-016: A verdict covers the rule decision only, with no expiry
+
+**Date:** 2026-10-27 · **Phase:** 4 (decisions + verdicts)
+
+**Decision:** The signed payload is what the rules said when the request was made: decision, request, agent, vendor, amount (minor units as a string), chain, mandate id + version, outcome, reason code, `iss`, `iat` (`lib/verdict/claims.ts`). The review result isn't in it, and approving or rejecting doesn't re-sign. There is no `exp`.
+
+**Why:** The review is a later human action; the page shows it next to the verdict, but folding it in would mean re-signing history. A verdict is a record of a past decision, so an expiry would only make old records fail verification.
+
+**Trade-off:** The review result isn't cryptographically provable in this demo. A signed review receipt would be the natural follow-up.
+
+---
+
+## D-017: Tamper flips the outcome and keeps the original signature
+
+**Date:** 2026-10-27 · **Phase:** 4 (decisions + verdicts)
+
+**Decision:** The **Tamper with payload** switch re-encodes the payload with `outcome` changed (deny or review → allow, allow → deny) and keeps the original header and signature segments (`tamperVerdict` in `lib/verdict/decode.ts`). The changed line is tagged "changed, was …" in text, the previous result is cleared (a result is kept together with the token it was for), and the encoded token is shown under a disclosure.
+
+**Why:** Turning a denial into an allow is the attack a verdict exists to stop, and changing only the payload shows exactly what the signature protects.
+
+**Trade-off:** It's one fixed edit, not a free-form editor. That's enough to show the failure without a JSON editor to build and test.
+
+---
+
+## D-018: Decisions list filters live in the URL and run on the server; outcome is a toggle group
+
+**Date:** 2026-10-27 · **Phase:** 4 (decisions + verdicts)
+
+**Decision:**
+- `/decisions?outcome=deny&agent=agt_ops`: filters are read with `useSearchParams` and written with `router.replace` (`features/decisions/use-decision-filters.ts`), then passed to the existing `GET /api/decisions?outcome=&agentId=`. Each filter combination is its own query (`queryKeys.decisions(filters)`) with `keepPreviousData`, so switching doesn't flash skeletons. Pagination (25 per page) is client-side over the filtered result.
+- The outcome filter is a single-select shadcn **ToggleGroup** (radio semantics, labelled "Outcome"), not Tabs: ARIA tabs promise tab panels, and this is one list with a filter.
+- Each row has one real link (agent name), stretched over the row with an `after:` box (DataTable gained a `rowClassName` prop). Its accessible name adds the amount and vendor, so a list of links isn't just repeated agent names.
+- A review in the queue invalidates the decision list and detail caches, so they show the final state.
+- The app's QueryClient doesn't retry 404s (`isNotFound` in `lib/api/client.ts`): asking again won't make a missing decision appear.
+
+**Why:** Back from a decision returns to the same filtered list, and a filtered view can be shared as a link. Server-side filtering uses the contract that already exists.
+
+**Trade-offs:**
+- `useSearchParams` needs a Suspense boundary in the page (`app/decisions/page.tsx`).
+- The page number isn't in the URL, so Back returns to page 1 of the same filter.
+- "View payment ›" links to a placeholder `/payments/[id]` until phase 5.

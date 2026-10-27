@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { formatAbsolute, formatRelative } from "./date"
+import {
+  formatAbsolute,
+  formatDateTimeUtc,
+  formatDateUtc,
+  formatRelative,
+  formatTimeUtc,
+} from "./date"
 
 const now = new Date("2026-10-27T14:00:00Z")
 
@@ -37,5 +43,13 @@ describe("formatAbsolute", () => {
     expect(formatAbsolute("2026-10-27T13:02:00Z", "UTC")).toBe(
       "2026-10-27 13:02 UTC · 13:02 UTC",
     )
+  })
+})
+
+describe("UTC date and time", () => {
+  it("formats time, date and both, always in UTC", () => {
+    expect(formatTimeUtc("2026-10-18T04:02:00Z")).toBe("04:02 UTC")
+    expect(formatDateUtc("2026-10-18T23:59:00Z")).toBe("18 Oct")
+    expect(formatDateTimeUtc("2026-10-18T14:02:00Z")).toBe("18 Oct, 14:02 UTC")
   })
 })

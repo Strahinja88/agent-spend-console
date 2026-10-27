@@ -8,6 +8,7 @@ import {
   decisionDetailResponse,
   decisionsQuery,
   decisionsResponse,
+  jwksResponse,
   mandatesResponse,
   paymentDetailResponse,
   rejectBody,
@@ -59,13 +60,13 @@ async function readJson(request: Request): Promise<unknown> {
 export const handlers = [
   http.get(`${API}/agents`, async () => {
     await latency()
-    return send(agentsResponse, getDb().agents)
+    return send(agentsResponse, (await getDb()).agents)
   }),
 
   http.get(`${API}/mandates`, async ({ request }) => {
     await latency()
     const agentId = new URL(request.url).searchParams.get("agentId")
-    const { mandates } = getDb()
+    const { mandates } = await getDb()
     return send(
       mandatesResponse,
       agentId ? mandates.filter((m) => m.agentId === agentId) : mandates,
@@ -74,7 +75,7 @@ export const handlers = [
 
   http.get(`${API}/approvals`, async () => {
     await latency()
-    const db = getDb()
+    const db = await getDb()
     return send(
       approvalsResponse,
       waitingEntries(db).map(({ request, decision }) => ({
@@ -96,7 +97,7 @@ export const handlers = [
       return fail(400, "INVALID_REQUEST", "Unknown outcome filter.")
     }
     const { outcome, agentId } = query.data
-    const db = getDb()
+    const db = await getDb()
     const items = db.entries
       .filter(
         (e) =>
@@ -114,19 +115,28 @@ export const handlers = [
 
   http.get(`${API}/decisions/:id`, async ({ params }) => {
     await latency()
-    const db = getDb()
+    const db = await getDb()
     const entry = findByDecision(db, String(params.id))
     if (!entry) return fail(404, "NOT_FOUND", "Decision not found.")
+    const mandate = findMandate(db, entry.decision.mandateId)
     return send(decisionDetailResponse, {
       ...entry,
       agent: findAgent(db, entry.request.agentId),
-      mandate: findMandate(db, entry.decision.mandateId),
+      mandate,
+      ...(mandate.supersededBy && {
+        replacedBy: findMandate(db, mandate.supersededBy),
+      }),
     })
+  }),
+
+  http.get(`${API}/jwks`, async () => {
+    await latency()
+    return send(jwksResponse, { keys: [(await getDb()).key.publicJwk] })
   }),
 
   http.get(`${API}/payments/:id`, async ({ params }) => {
     await latency()
-    const db = getDb()
+    const db = await getDb()
     const entry = findByPayment(db, String(params.id))
     if (!entry) return fail(404, "NOT_FOUND", "Payment not found.")
     return send(paymentDetailResponse, {
@@ -137,7 +147,7 @@ export const handlers = [
 
   http.post(`${API}/decisions/:id/approve`, async ({ params, request }) => {
     await latency()
-    const db = getDb()
+    const db = await getDb()
     const entry = findByDecision(db, String(params.id))
     if (!entry) return fail(404, "NOT_FOUND", "Decision not found.")
     if (!isWaitingForReview(entry.decision)) {
@@ -167,7 +177,7 @@ export const handlers = [
 
   http.post(`${API}/decisions/:id/reject`, async ({ params, request }) => {
     await latency()
-    const db = getDb()
+    const db = await getDb()
     const entry = findByDecision(db, String(params.id))
     if (!entry) return fail(404, "NOT_FOUND", "Decision not found.")
     if (!isWaitingForReview(entry.decision)) {

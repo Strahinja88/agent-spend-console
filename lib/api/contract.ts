@@ -70,9 +70,29 @@ export const decisionDetailResponse = z.object({
   decision: decisionSchema,
   request: paymentRequestSchema,
   agent: agentSchema,
+  /** The mandate the request was evaluated under. */
   mandate: mandateSchema,
+  /** The mandate that replaced it, if it has been replaced since. */
+  replacedBy: mandateSchema.optional(),
   payment: paymentSchema,
 })
+
+/**
+ * A public EC P-256 key. Zod drops unknown fields, so a private `d` can never
+ * pass through this schema.
+ */
+export const jwkSchema = z.object({
+  kty: z.literal("EC"),
+  crv: z.literal("P-256"),
+  x: z.string(),
+  y: z.string(),
+  kid: z.string(),
+  alg: z.literal("ES256"),
+  use: z.literal("sig"),
+})
+
+/** GET /api/jwks: the keys verdicts are signed with (D-015). */
+export const jwksResponse = z.object({ keys: z.array(jwkSchema) })
 
 /** GET /api/payments/:id */
 export const paymentDetailResponse = z.object({
@@ -116,4 +136,6 @@ export type QueueItem = z.output<typeof queueItemSchema>
 export type DecisionListItem = z.output<typeof decisionListItemSchema>
 export type DecisionDetail = z.output<typeof decisionDetailResponse>
 export type PaymentDetail = z.output<typeof paymentDetailResponse>
+export type Jwk = z.output<typeof jwkSchema>
+export type Jwks = z.output<typeof jwksResponse>
 export type ApiErrorCode = z.output<typeof apiErrorCodeSchema>

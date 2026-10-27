@@ -13,6 +13,12 @@ import type {
   PaymentRequest,
 } from "@/lib/domain/types"
 import { usdc } from "@/lib/format/amount"
+import { verdictClaims } from "@/lib/verdict/claims"
+import {
+  createVerdictKey,
+  signVerdict,
+  type VerdictKey,
+} from "@/lib/verdict/sign"
 
 import { mockConfig } from "./config"
 import { HELD_BACK, type HeldBackRequest } from "./seed/fixtures"
@@ -24,8 +30,9 @@ import {
 } from "./seed/generate"
 
 // In-memory state behind the mock API. Lives in the page, so a reload starts
-// over from the seed. Approve/reject change it; nothing else does, apart from
-// the held-back requests that arrive a little after start.
+// over from the seed (and a new signing key). Approve/reject change it;
+// nothing else does, apart from the held-back requests that arrive a little
+// after start.
 
 export const DEMO_REVIEWER = "Demo reviewer"
 
@@ -36,25 +43,42 @@ type MockDb = {
   startedAt: number
   heldBack: HeldBackRequest[]
   nextId: number
+  /** Signs every verdict. The private half never leaves this object (D-015). */
+  key: VerdictKey
+  /** Held-back releases run one at a time, so concurrent requests can't release twice. */
+  releasing: Promise<void>
 }
 
-let db: MockDb | undefined
+let db: Promise<MockDb> | undefined
 
-function createDb(): MockDb {
+async function signed(entry: SeedEntry, key: VerdictKey): Promise<SeedEntry> {
+  const { request, decision } = entry
+  const verdictJwt = await signVerdict(
+    verdictClaims(decision, request),
+    decision.decidedAt,
+    key,
+  )
+  return { ...entry, decision: { ...decision, verdictJwt } }
+}
+
+async function createDb(): Promise<MockDb> {
   const now = mockConfig.now()
   const seed = generateSeed(seedAnchor(new Date(now)))
+  const key = await createVerdictKey()
   return {
     agents: seed.agents,
     mandates: seed.mandates,
-    entries: [...seed.entries],
+    entries: await Promise.all(seed.entries.map((e) => signed(e, key))),
     startedAt: now,
     heldBack: [...HELD_BACK],
     nextId: 1,
+    key,
+    releasing: Promise.resolve(),
   }
 }
 
 /** Adds held-back requests whose time has come, evaluated like any other request. */
-function releaseHeldBack(state: MockDb) {
+async function releaseHeldBack(state: MockDb) {
   const due = state.heldBack.filter(
     (h) => state.startedAt + h.afterSeconds * 1000 <= mockConfig.now(),
   )
@@ -77,7 +101,7 @@ function releaseHeldBack(state: MockDb) {
       state.entries,
       `dec_new${n}`,
     )
-    state.entries.push({
+    const entry: SeedEntry = {
       request,
       decision,
       payment: {
@@ -88,15 +112,19 @@ function releaseHeldBack(state: MockDb) {
           decision.outcome === "review" ? "pending_approval" : "confirmed",
         simulated: true,
       },
-    })
+    }
+    // In order, so each request is evaluated against the ones before it
+    state.entries.push(await signed(entry, state.key))
   }
   state.heldBack = state.heldBack.filter((h) => !due.includes(h))
 }
 
-export function getDb(): MockDb {
+export async function getDb(): Promise<MockDb> {
   db ??= createDb()
-  releaseHeldBack(db)
-  return db
+  const state = await db
+  state.releasing = state.releasing.then(() => releaseHeldBack(state))
+  await state.releasing
+  return state
 }
 
 /** Back to a fresh seed (tests, or a "reset demo" action later). */

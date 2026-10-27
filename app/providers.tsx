@@ -5,13 +5,17 @@ import { useState } from "react"
 
 import { MockProvider } from "@/components/mock-provider"
 import { Toaster } from "@/components/ui/sonner"
+import { isNotFound } from "@/lib/api/client"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { retry: 1 },
+          queries: {
+            // Once, but never a 404: asking again won't make it appear
+            retry: (count, error) => !isNotFound(error) && count < 1,
+          },
           // Mutations roll back and offer Retry themselves
           mutations: { retry: false },
         },

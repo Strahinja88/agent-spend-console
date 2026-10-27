@@ -193,7 +193,7 @@ shadcn components read their own variable names; `globals.css` aliases them to o
 | **Timeline / TimelineStep** | data | steps: `{ key, title, status, time?, children }[]` | `<ol>` with a vertical connector. Each step has a status icon + text ("Done", "In progress", "Failed", "Not reached"). |
 | **RuleSentence** | data | `rule: Rule`, `matched?: boolean` | Renders a rule as one sentence ("Payments above 100.00 USDC need review."). The text comes from `lib/domain` (phase 2); this only presents it, with the key number emphasised and a "Matched rule" label when `matched`. |
 | **SpendBar** | data | `committed: bigint`, `limit: bigint`, `period` | Meter with the text always visible ("1,730.00 of 3,000.00 USDC committed today"); the bar is supplementary. `role="meter"` with `aria-valuetext`. |
-| **VerdictPanel** | features/decisions | `jwt: string`, `jwks` | Decoded header + payload in code blocks, **Verify signature** button, **Tamper** switch, result shown StatusPill-style as "Signature valid" / "Signature invalid" + reason. Result announced via `aria-live="polite"`. |
+| **VerdictPanel** | features/decisions | `jwt: string` (keys from `GET /api/jwks`) | Decoded header + payload in code blocks, **Verify signature** button, **Tamper** switch, result shown StatusPill-style as "Signature valid" / "Signature invalid" + reason. Result announced via `aria-live="polite"`. |
 | **ApprovalUndoToast** | features/approvals | `request`, `onUndo`, `onCommit` | "Approved · *amount* to *vendor*" + **Undo**. Calls `onCommit` when the toast auto-closes. See §6.1. |
 | **EmptyState** | data | `icon`, `title`, `description`, `action?` | e.g. "Nothing waiting for approval" with a "View recent decisions" action. |
 | **ErrorState** | data | `title`, `description?`, `onRetry` | "Couldn't load approvals" with a **Retry** button. Never shows a raw error. |
@@ -376,7 +376,7 @@ Example: a deny under Ops Agent's **v2** mandate, on 18 Oct (before v3 replaced 
 │ Mandate v2                           │ Signed verdict                            │
 │ ⓘ Replaced by v3 on 20 Oct           │ Header                                    │
 │ Approved by M. Ilić · 12 Oct         │ ┌───────────────────────────────────────┐ │
-│                                      │ │ { "alg": "ES256", "kid": "demo-1" }   │ │
+│                                      │ │ { "alg": "ES256", "kid": "Xy3k…9QaB" }│ │
 │ • Up to 200.00 USDC per payment.     │ └───────────────────────────────────────┘ │
 │ ▸ Up to 500.00 USDC per day.         │ Payload                                   │
 │   Matched rule                       │ ┌───────────────────────────────────────┐ │
@@ -386,7 +386,7 @@ Example: a deny under Ops Agent's **v2** mandate, on 18 Oct (before v3 replaced 
 │ • Base and Solana only.              │ └───────────────────────────────────────┘ │
 │                                      │ [Verify signature]   ◯ Tamper with payload│
 │                                      │                                           │
-│                                      │ ✓ Signature valid · key demo-1 · ES256    │
+│                                      │ ✓ Signature valid · key Xy3k…9QaB · ES256 │
 └──────────────────────────────────────┴───────────────────────────────────────────┘
 ```
 
@@ -411,7 +411,11 @@ The matched rule is marked with ▸, bold text and a "Matched rule" label.
 │ ⚠ Waiting for review    1,250.00 USDC                [Review in queue ›]         │
 ```
 
-**Tamper** on: the payload block highlights the changed field (`"outcome": "allow"` with a "changed" tag) and the result is reset. Verify then shows `✕ Signature invalid: payload does not match signature`.
+**Tamper** on: the payload block highlights the changed field (`"outcome": "allow"` with a "changed, was "deny"" tag) and the result is reset. Verify then shows `✕ Signature invalid: payload does not match signature`. Allowed decisions flip to `"deny"` instead (D-017).
+
+**Keys:** the panel verifies in the browser with jose against the JWKS from `GET /api/jwks` (`createLocalJWKSet`). The `kid` is the key's RFC 7638 thumbprint, shown middle-truncated with the full value in `title`. A verdict whose `kid` isn't in the JWKS (e.g. signed on an earlier page load) shows `✕ Signature invalid: unknown key. It was signed with a key that isn't in the current key set…` rather than a signature error (D-015).
+
+**Mandate note:** `GET /api/decisions/:id` returns `replacedBy` (the superseding mandate) so the card can say "Replaced by v3 on 20 Oct"; a mandate revoked without a replacement says "Revoked on …".
 
 States: skeleton header + cards; "Decision not found" EmptyState linking back to the list; ErrorState with Retry.
 

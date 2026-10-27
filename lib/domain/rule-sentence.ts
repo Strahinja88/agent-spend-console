@@ -33,3 +33,27 @@ export function ruleToSentence(rule: Rule): string {
         : `${chainList(rule.chains)} only.`
   }
 }
+
+/** Structural equality, to find a decision's matched rule in its mandate. */
+export function isSameRule(a: Rule, b: Rule): boolean {
+  switch (a.kind) {
+    case "limit":
+      return (
+        b.kind === "limit" && a.period === b.period && a.amount === b.amount
+      )
+    case "review_threshold":
+      return b.kind === "review_threshold" && a.amount === b.amount
+    case "vendor_allowlist":
+      return (
+        b.kind === "vendor_allowlist" &&
+        a.vendors.length === b.vendors.length &&
+        a.vendors.every((vendor, i) => vendor === b.vendors[i])
+      )
+    case "chain":
+      return (
+        b.kind === "chain" &&
+        a.chains.length === b.chains.length &&
+        a.chains.every((chain, i) => chain === b.chains[i])
+      )
+  }
+}

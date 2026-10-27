@@ -56,3 +56,7 @@ export function postJson<S extends z.ZodType>(
     body: JSON.stringify(body),
   })
 }
+
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404
+}

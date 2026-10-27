@@ -83,6 +83,12 @@ function restore({ handlers }: ActionContext, item: QueueItem) {
 }
 
 function refresh({ queryClient }: ActionContext) {
+  // Decision lists and details show the review result, so they go stale too.
+  // Only the ones on screen refetch now; the rest refetch when next shown.
+  void queryClient.invalidateQueries({ queryKey: queryKeys.decisionLists() })
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.decisionDetails(),
+  })
   return queryClient.invalidateQueries({ queryKey: queryKeys.approvals() })
 }
 

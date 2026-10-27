@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import { usdc } from "@/lib/format/amount"
 
-import { ruleToSentence } from "./rule-sentence"
+import { isSameRule, ruleToSentence } from "./rule-sentence"
+import { opsMandateV2 } from "./test-fixtures"
 import type { Rule } from "./types"
 
 describe("ruleToSentence", () => {
@@ -40,5 +41,22 @@ describe("ruleToSentence", () => {
     [{ kind: "chain", chains: [] }, "No chains are allowed."],
   ])("%o", (rule, expected) => {
     expect(ruleToSentence(rule)).toBe(expected)
+  })
+})
+
+describe("isSameRule", () => {
+  const rules = opsMandateV2().rules
+
+  it("finds exactly the matching rule in a mandate", () => {
+    for (const rule of rules) {
+      expect(rules.filter((r) => isSameRule(r, rule))).toEqual([rule])
+    }
+  })
+
+  it("tells limits apart by period and amount", () => {
+    const day = { kind: "limit", amount: usdc("500"), period: "day" } as const
+    expect(isSameRule(day, { ...day })).toBe(true)
+    expect(isSameRule(day, { ...day, period: "month" })).toBe(false)
+    expect(isSameRule(day, { ...day, amount: usdc("501") })).toBe(false)
   })
 })

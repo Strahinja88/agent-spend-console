@@ -95,7 +95,12 @@ describe("MainNav: waiting count", () => {
         <ApprovalQueue />
       </>,
     )
-    await waitFor(() => expect(api.gets("/api/approvals")).toHaveLength(1))
+    // The first response has to land before the poll timer counts: the mock
+    // signs its verdicts with WebCrypto on start, which fake timers don't cover
+    await waitFor(() =>
+      expect(approvalsLink()).toHaveAccessibleName("Approvals, 12 waiting"),
+    )
+    expect(api.gets("/api/approvals")).toHaveLength(1)
 
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS))
     await waitFor(() => expect(api.gets("/api/approvals")).toHaveLength(2))
