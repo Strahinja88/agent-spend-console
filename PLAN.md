@@ -168,7 +168,7 @@ docs/design.md  docs/decisions.md
 3. **Approval queue**: full screen from 4.1 with tests for approve/reject and rollback.
 4. **Decisions + verdicts**: list, detail, jose sign/verify with tamper demo, tests for verify.
 5. **Payment timeline**: viem + Solana read clients, real testnet tx, all states.
-6. **Polish + ship**: axe + keyboard pass, mobile check, deploy to Vercel, README with screenshots/GIF and live link, `docs/decisions.md` (5–8 short decisions and trade-offs).
+6. **Polish + ship**: axe + keyboard pass, mobile check, deploy to Vercel (done by the owner), README with screenshots and live link, `docs/decisions.md` tidied to short entries. Playwright e2e runs locally (`pnpm e2e`, D-022).
 
 ---
 

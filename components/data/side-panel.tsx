@@ -60,7 +60,11 @@ export function SidePanel({
   if (!isDesktop) {
     return (
       <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-        <SheetContent side="right" className="w-full gap-0 sm:max-w-none">
+        <SheetContent
+          side="right"
+          // data-[side] variants, or shadcn's 3/4 width and max-w-sm win
+          className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-none"
+        >
           <SheetHeader className="border-b border-border">
             <SheetTitle>{title}</SheetTitle>
             {description && <SheetDescription>{description}</SheetDescription>}

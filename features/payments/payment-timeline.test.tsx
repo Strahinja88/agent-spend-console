@@ -1,10 +1,12 @@
 import { act, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { http } from "msw"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ChainError } from "@/lib/chain/errors"
 import type { OnchainTx } from "@/lib/chain/types"
 import { usdc } from "@/lib/format/amount"
+import { server } from "@/mocks/node"
 import { generateSeed, type SeedEntry } from "@/mocks/seed/generate"
 import { TX_SLOTS, type TxSlotKey } from "@/mocks/seed/tx-slots"
 
@@ -250,5 +252,31 @@ describe("PaymentTimeline", () => {
   it("says so when the payment doesn't exist", async () => {
     renderWithProviders(<PaymentTimeline id="pay_nope" />)
     expect(await screen.findByText("Payment not found")).toBeInTheDocument()
+  })
+
+  it("shows an error with Retry when the payment can't be loaded", async () => {
+    server.use(
+      http.get(
+        "*/api/payments/:id",
+        () =>
+          Response.json(
+            { code: "SIMULATED_FAILURE", message: "x" },
+            { status: 500 },
+          ),
+        { once: true },
+      ),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(
+      <PaymentTimeline id={paymentId((e) => e.payment.simulated)} />,
+    )
+
+    expect(
+      await screen.findByText("Couldn't load this payment"),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Retry" }))
+    expect(
+      await screen.findByRole("list", { name: "Payment steps" }),
+    ).toBeInTheDocument()
   })
 })

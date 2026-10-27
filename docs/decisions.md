@@ -1,321 +1,293 @@
 # Decisions
 
-Short records of non-obvious choices and their trade-offs. Newest last.
+Short records of non-obvious choices and their trade-offs, newest last. IDs are stable: code comments refer to them.
 
 ---
 
 ## D-001: Smaller `text-sm` / `text-base` than Tailwind's defaults
 
-**Date:** 2026-10-27 · **Phase:** 1 (design)
+**Phase 1.** `text-sm` = 13/20px, `text-base` = 14/22px, plus a new `text-md` = 16/24px, set in `@theme`.
 
-**Decision:** Override Tailwind's type scale in `@theme`: `text-sm` = 13px / 20px (default 14px), `text-base` = 14px / 22px (default 16px), and add `text-md` = 16px / 24px.
-
-**Why:** The console is a dense, data-heavy finance tool. 13px table bodies fit more rows and columns on screen without horizontal scrolling, and 14px UI text matches the density of comparable tools. Overriding the tokens, rather than using arbitrary values like `text-[13px]`, keeps every size in one place and keeps "no hard-coded values outside tokens" true.
+**Why:** A dense finance table fits more rows and columns at 13px. Overriding the tokens keeps every size in one place, with no arbitrary `text-[13px]`.
 
 **Trade-offs:**
-- This applies globally, including inside shadcn components (which use `text-sm` for most body text), so shadcn renders slightly smaller than its docs show. That's intended.
-- Anyone used to Tailwind's defaults may expect `text-base` to be 16px; `docs/design.md` §3.4 is the reference.
-- 13px is the floor. Nothing that carries meaning goes below `text-xs` (12px), and users can still zoom to 200% (WCAG 1.4.4) because sizes are in `rem`.
+- shadcn components render a little smaller than in their docs.
+- `text-base` isn't 16px here. `docs/design.md` §3.4 is the reference.
+- Nothing meaningful goes below 12px. Sizes are in `rem`, so 200% zoom still works.
 
 ---
 
 ## D-002: Brand colour token is `--brand`, not `--accent`
 
-**Date:** 2026-10-27 · **Phase:** 1 (design)
+**Phase 1.** The indigo accent is `--brand` (with `-foreground` and `-muted`), and shadcn's `--primary` aliases it.
 
-**Decision:** The single indigo accent colour is named `--brand` (`--brand-foreground`, `--brand-muted`). shadcn's `--primary` is aliased to it.
+**Why:** shadcn already uses `--accent` for subtle hover backgrounds. Reusing the name would recolour every hover or make the name mean two things.
 
-**Why:** shadcn already uses `--accent` for subtle hover backgrounds (menu items, ghost buttons). Reusing the name for the brand colour would either recolour every hover state indigo or make the name mean two things.
-
-**Trade-off:** One more alias layer in `globals.css` (see `docs/design.md` §3.7).
+**Trade-off:** One more alias layer in `globals.css`.
 
 ---
 
-## D-003: Add next-themes and sonner to the stack
+## D-003: next-themes and sonner added to the stack
 
-**Date:** 2026-10-27 · **Phase:** 1 (scaffold)
+**Phase 1.** Both are shadcn's standard choices.
+- `next-themes` gives no-flash dark mode with system preference.
+- `sonner` gives an undo toast that pauses on hover and focus and calls back when it closes.
 
-**Decision:** Add `next-themes` (installed in phase 1) and `sonner` (installed in phase 3, when the queue needs it) to PLAN.md §2.
+**Why:** Hand-rolled theme switching is easy to get wrong with SSR hydration. The undo flow (D-012) needs sonner's callbacks.
 
-**Why:**
-- **next-themes** is the standard shadcn approach to dark mode. It injects a blocking script so the right theme class is on `<html>` before first paint (no flash), follows the system preference, and syncs across tabs. Hand-rolling this is ~30 lines that are easy to get subtly wrong with SSR hydration.
-- **sonner** is shadcn's toast component. The approval queue needs an "Approved · Undo" toast whose auto-close sends the mutation, and that pauses on hover and focus (`docs/design.md` §6.1). Sonner supports both.
-
-**Trade-off:** Two more small runtime dependencies.
+**Trade-off:** Two small runtime dependencies.
 
 ---
 
-## D-004: Dependency rule: dev tooling is free, runtime dependencies need approval
+## D-004: Dev tooling is free, runtime dependencies need approval
 
-**Date:** 2026-10-27 · **Phase:** 1 (scaffold)
+**Phase 1.** Test, lint and format tooling can be added without asking. Runtime dependencies not in PLAN.md §2 need approval (PLAN.md §9).
 
-**Decision:** Standard dev tooling can be added without asking. Runtime dependencies not listed in PLAN.md §2 still need approval first (PLAN.md §9 updated).
+**Why:** Dev tooling doesn't ship to users. Runtime dependencies affect bundle size, security and what a reviewer must understand.
 
-Added under this rule in phase 1, following the standard Next.js + Vitest setup:
-- `jsdom`: DOM environment for Vitest
-- `@testing-library/react`, `/dom`, `/jest-dom`, `/user-event`
-- `@vitejs/plugin-react`: JSX in tests. (`vite-tsconfig-paths` was planned, but Vite now resolves `@/` aliases natively with `resolve.tsconfigPaths`, so it wasn't kept.)
-- `prettier-plugin-tailwindcss`, `eslint-config-prettier`
-
-**Why:** Dev tooling doesn't ship to users or widen the runtime attack surface, and asking each time slows down every phase. Runtime dependencies affect bundle size, security and what the reviewer has to understand, so they stay gated.
-
-**Note:** shadcn's current CLI also pulled in `radix-ui`, `class-variance-authority`, `lucide-react`, `tw-animate-css`, `cn` (shadcn's merged clsx + tailwind-merge) and `shadcn` itself (for its base CSS). These are counted as part of "shadcn/ui" in PLAN.md §2.
+**Note:** shadcn's CLI also brought `radix-ui`, `class-variance-authority`, `lucide-react`, `tw-animate-css` and `cn`. These count as "shadcn/ui".
 
 ---
 
-## D-005: Phase-scoped installs and pnpm build-script allowlist
+## D-005: Phase-scoped installs and a pnpm build-script allowlist
 
-**Date:** 2026-10-27 · **Phase:** 1 (scaffold)
+**Phase 1.** Each library is installed in the phase that first uses it. `pnpm-workspace.yaml` only lets `unrs-resolver` and `sharp` run install scripts.
 
-**Decision:**
-- Libraries from PLAN.md §2 are installed in the phase that first uses them (TanStack Query/Table, Zod, MSW, jose, viem, @solana/web3.js), not all in phase 1.
-- `pnpm-workspace.yaml` lists the packages allowed to run install scripts (`allowBuilds`): `unrs-resolver` (used by eslint-config-next's import resolver) and `sharp` (Next.js image optimisation). pnpm blocks all others by default.
-
-**Why:** Unused dependencies at a phase's commit can't be reviewed against code that uses them. The build-script allowlist keeps pnpm's protection against malicious install scripts while letting the two known native packages build.
+**Why:** An unused dependency can't be reviewed against the code that uses it. The allowlist keeps pnpm's protection against malicious install scripts.
 
 ---
 
 ## D-006: Committed spend includes requests waiting for review
 
-**Date:** 2026-10-27 · **Phase:** 2 (domain)
+**Phase 2.** Committed spend = allowed + approved + **still waiting**. A rejected request stops counting from its `reviewedAt`. See `lib/domain/spend.ts`.
 
-**Decision:** Committed spend for a period = allowed + approved after review + **still waiting for review**. Denied requests never count. A rejected request stops counting from its `reviewedAt`, so requests evaluated before the rejection still saw it as reserved. Defined in `lib/domain/spend.ts` (`committedSpend`, `countsAsCommitted`).
-
-**Why:** Reserving waiting amounts means a reviewer can approve everything in the queue without breaking a limit, so approval never has to re-run the limits of the mandate the request was evaluated under, and the decision a request got stays true for its whole life. The alternative (count only allowed + approved) makes the queue order-dependent: two requests that each fit can't both be approved, and the evaluator's answer goes stale while the request waits.
+**Why:** Reserving waiting amounts means a reviewer can approve the whole queue without breaking a limit, and a request's decision stays true while it waits. Without the reservation, the queue becomes order-dependent.
 
 **Trade-offs:**
-- An agent can be denied while earlier requests are still waiting, even if a reviewer later rejects those. That's the conservative choice for a spend control.
-- A rejection doesn't re-open earlier denials. They stay denied, and the agent has to retry.
+- An agent can be denied while earlier requests wait, even if those are later rejected. That's the conservative choice for a spend control.
+- A rejection doesn't re-open earlier denials.
 
 ---
 
-## D-007: Approval re-checks the agent's *current* mandate and warns
+## D-007: Approval re-checks the agent's *current* mandate
 
-**Date:** 2026-10-27 · **Phase:** 2 (domain)
+**Phase 2.** If the mandate was replaced with lower limits (or revoked) while a request waited, `checkApproval` (`lib/domain/approval-check.ts`) lists every breach.
+- The queue shows it as `limitWarning`.
+- `POST …/approve` answers **409 `LIMIT_WARNING`** unless the body has `acknowledgeLimitWarning: true`.
+- The seed has one case: Support Bot v1 → v2 lowers the daily limit while a 250.00 request waits.
 
-**Decision:** Because of D-006, approving can't break the mandate a request was evaluated under. It *can* break the agent's current mandate if that mandate was replaced with lower limits (or revoked) while the request waited. `checkApproval` (`lib/domain/approval-check.ts`) re-runs the hard rules against the current mandate, with committed spend as of now minus the request itself, and lists every breach as a sentence (or `NO_ACTIVE_MANDATE`).
-- `GET /api/approvals` returns it per item as `limitWarning`, so the queue can warn before approving (phase 3).
-- `POST /api/decisions/:id/approve` refuses with **409 `LIMIT_WARNING`** unless the body has `acknowledgeLimitWarning: true`. The reviewer can still approve on purpose, but never by accident, even from a stale screen.
-- The seed has one such case: Support Bot's mandate v1 is replaced on the anchor day by v2 (daily limit 1,000.00 → 400.00) while a 250.00 request from v1 is waiting.
+**Why:** The reviewer can still approve on purpose, but never by accident, even from a stale screen.
 
-**Trade-off:** The reviewer, not the system, decides whether the old or new mandate wins. That fits "review" as a human judgement, and the warning keeps the choice explicit.
+**Trade-off:** The human decides whether the old or new mandate wins.
 
 ---
 
-## D-008: Seed clock follows "now", 14:00 UTC anchor
+## D-008: Seed clock follows "now", with a 14:00 UTC anchor
 
-**Date:** 2026-10-27 · **Phase:** 2 (mocks)
+**Phase 2.** The seed is generated for the latest 14:00 UTC at or before now. Tests use the fixed anchor 27 Oct 2026 14:00 UTC.
 
-**Decision:** Seed times are written relative to an anchor (day offset + UTC time). At load, the anchor is the latest 14:00 UTC at or before now (`seedAnchor`), and the seed is generated for that anchor. Tests use the fixed anchor 27 Oct 2026 14:00 UTC, which matches the sketches in `docs/design.md`.
-
-**Why:** A fixed date would make the demo look stale a week after deploy ("3 weeks ago" everywhere). Shifting stored timestamps was rejected because moving a seed across UTC month boundaries changes monthly-limit results, so stored decisions would no longer match the evaluator. Generating per anchor keeps every decision exactly what `evaluate` returns.
+**Why:** A fixed date looks stale a week after deploy. Shifting stored timestamps instead would break monthly-limit results across month ends. Generating per anchor keeps every stored decision equal to what the evaluator returns.
 
 **Trade-offs:**
-- Amounts, vendors, ids and order are the same on every load. Times move with the day, and on a few anchors a monthly-limit outcome of the Data Pipeline filler can differ (it's the only monthly limit). Scripted requests are checked on generation (`expect`), and the test runs several anchors across month and year ends.
-- Queue ages depend on time of day: from minutes (just after 14:00 UTC) up to about a day.
-- Three "held-back" requests enter the queue 30 s, 90 s and 180 s after the mock starts, so polling and "new request" announcements can be demoed. They're evaluated when they arrive, like any request.
+- Ids, amounts and order never change. Times move with the day.
+- Data Pipeline's monthly-limit filler can differ on some anchors. Tests cover several anchors across month and year ends.
+- Three requests arrive 30, 90 and 180 s after load, to demo polling.
 
 ---
 
 ## D-009: Schema additions to PLAN.md §3
 
-**Date:** 2026-10-27 · **Phase:** 2 (domain)
+**Phase 2.**
+- `Decision.reviewResult` and `reviewReason`.
+- `Payment.simulated`: only the few slot payments have real transactions (D-019). The rest show "Simulated payment".
+- `verdictJwt` was a placeholder until phase 4 (D-015).
 
-**Decision:**
-- `Decision.reviewResult?: 'approved' | 'rejected'` and `Decision.reviewReason?: string`, as noted in `docs/design.md` §2.2, instead of deriving the review result from `Payment.status`.
-- `Payment.simulated: boolean`. Only 2–3 seed payments get real testnet transactions (PLAN.md §3). The rest have no `txHash` and `simulated: true`, and phase 5 shows "Simulated payment, no onchain transaction" for them.
-- Real-tx slots (`mocks/seed/tx-slots.ts`) are small payments (2.50, 3.00 and 4.00 USDC) so faucet USDC covers them. A slot stays simulated until its hash is filled in. (Phase 5 filled them with existing transfers and adopted their amounts instead, see D-019.)
-- `verdictJwt` is an unsigned JWT-shaped placeholder (`alg: "none"`) until phase 4 signs verdicts with jose.
-
-**Why:** Fake but well-formed hashes would make every other payment show "Transaction not found" in phase 5. An explicit flag is honest and saves pointless RPC calls.
+**Why:** Fake but well-formed hashes would make every payment show "Transaction not found". An explicit flag is honest and saves RPC calls.
 
 ---
 
 ## D-010: bigint over JSON as integer strings, via one Zod codec
 
-**Date:** 2026-10-27 · **Phase:** 2 (domain)
+**Phase 2.** Amounts travel as minor-unit strings (`"120000000"`) and are `bigint` in the app. `bigintString` (`lib/domain/schemas.ts`) is a Zod 4 codec: the mock encodes, the client parses, and both share one schema per endpoint (`lib/api/contract.ts`).
 
-**Decision:** Amounts are integer strings in minor units on the wire (`"120000000"`) and `bigint` in the app. `bigintString` in `lib/domain/schemas.ts` is a Zod 4 codec: the mock API calls `schema.encode()` and the client (`lib/api/client.ts`) calls `schema.parse()` to decode. Every endpoint has one schema in `lib/api/contract.ts` that both sides use. Domain types come from the schemas (`z.output`), so there are no hand-written duplicates.
+**Why:** `JSON.stringify` throws on bigint, and JSON numbers lose precision above 2^53. The codec rejects numbers, so an amount never passes through a float.
 
-**Why:** `JSON.stringify` throws on bigint, and JSON numbers lose precision above 2^53. The codec rejects JSON numbers, so an amount can never pass through a float. One schema for both directions means the mock and client can't disagree on the format.
-
-**Trade-off:** Wire payloads aren't directly readable as amounts ("120000000", not "120.00"), which is the usual choice for token amounts.
+**Trade-off:** Wire payloads aren't readable as amounts.
 
 ---
 
 ## D-011: The mock API runs in every build, production included
 
-**Date:** 2026-10-27 · **Phase:** 3 (approval queue)
+**Phase 3.** MSW's service worker starts in the browser in development and in the deployed build. `MockProvider` loads it with `next/dynamic({ ssr: false })` and exposes an "API ready" flag. Queries wait for it.
 
-**Decision:** MSW's service worker starts in the browser in development *and* in the deployed build. `MockProvider` (`components/mock-provider.tsx`) loads `components/mock-worker.tsx` with `next/dynamic` and `ssr: false`, and exposes an "API ready" flag (`lib/api/api-ready.ts`). Queries use `enabled: ready`, so nothing fetches before the worker is up, and pages render their skeletons meanwhile.
-
-**Why:** There is no real backend (PLAN.md §1 non-goals), so without MSW the Vercel demo would have no data. `ssr: false` is required, not a preference: MSW 3 exports `msw/browser` with `"node": null`, so a plain dynamic import inside a client component fails the server build.
+**Why:** There's no backend, so without MSW the deployed demo would have no data. `ssr: false` is required because `msw/browser` has no Node build.
 
 **Trade-offs:**
-- Every visitor downloads MSW and the seed (part of the 34.6 kB on `/approvals`) and registers a service worker on the site's origin. Fine for a demo; a real product would swap the provider for a real API.
-- First data arrives after the worker registers (a few hundred ms on a cold load). If the worker fails to start, queries run anyway and screens show their error state instead of loading forever.
-- Mock state lives in the page: a reload starts over from the seed (as designed in phase 2).
+- Every visitor downloads MSW and the seed, and registers a service worker.
+- If the worker fails, screens show their error state instead of loading forever.
+- A reload starts over from the seed.
 
 ---
 
-## D-012: Optimistic review through a shared hidden-id overlay; approvals sent from the toast
+## D-012: Optimistic review through a hidden-id overlay; approvals sent from the toast
 
-**Date:** 2026-10-27 · **Phase:** 3 (approval queue)
+**Phase 3.**
+- Approve and reject add the decision id to a small module-level set (`lib/api/review-overlay.ts`), which the queue and sidebar filter out. Rollback removes it.
+- Deferred approvals (≤ 1,000.00 USDC, no warning) are sent when the undo toast closes. **Undo is the only way to cancel**: swiping the toast away also sends.
+- Requests are plain async functions, not `useMutation`, so they still send and roll back after the queue unmounts.
 
-**Decision:**
-- Approve/reject don't edit the TanStack Query cache. They add the decision id to a small module-level set (`lib/api/review-overlay.ts`, read with `useSyncExternalStore`); the queue and the sidebar count filter it out. Rollback removes the id. A fetch that no longer lists an id prunes it.
-- Deferred approvals (≤ 1,000.00 USDC, no limit warning) live in `features/approvals/pending-approvals.ts`. Every path that sends goes through `commitApproval`, which removes the entry first, so nothing sends twice.
-- **Undo is the only way to cancel.** The toast's auto-close sends (design.md §6.1), and so does any other dismissal (swipe away, `toast.dismiss` when leaving the page). Sonner calls `onDismiss` for those, not `onAutoClose`.
-- Requests are plain async functions over the shared `QueryClient` rather than `useMutation`, because a deferred approval must still send, and roll back, after the queue unmounts.
-
-**Why:** Polling makes cache edits fragile: a poll that lands during the undo window or while a request is in flight would bring the row back. The overlay keeps hidden rows hidden whatever the poll returns (design.md §6.1), works the same for the queue and the sidebar, and makes rollback one line. Treating swipe-away as "send" matches what the reviewer saw: the toast said *Approved*, and only Undo says otherwise.
+**Why:** Polling makes cache edits fragile, because a poll during the undo window would bring the row back. The overlay keeps rows hidden whatever the poll returns.
 
 **Trade-offs:**
-- Module-level state is global to the tab; tests reset it (`resetReviewOverlay`, `resetPendingApprovals`).
-- Focus after Undo needs a second `focus()` call: sonner returns focus to where it was before the toast as soon as focus leaves the toast, and the second call wins (commented in `approval-queue.tsx`).
+- The state is global to the tab, and tests reset it.
+- Undo needs a second `focus()` call to win over sonner's focus return.
 
 ---
 
 ## D-013: A limit warning always means the confirm dialog, with Cancel focused
 
-**Date:** 2026-10-27 · **Phase:** 3 (approval queue)
+**Phase 3.** A request with a limit warning (D-007) never gets the undo toast. Approving it opens the same dialog used above 1,000.00 USDC, which lists the breaches and offers **Approve anyway**.
+- Both dialog variants open with focus on **Cancel**, set explicitly.
+- A 409 from a stale screen restores the row and reopens the dialog with the new breaches.
 
-**Decision:** A request whose `limitWarning` isn't ok (D-007) never uses the undo toast, whatever its amount. Approving it (button or `a`) opens the same AlertDialog as > 1,000.00 USDC, listing the breaches, with **Approve anyway**, which sends `acknowledgeLimitWarning: true`. In both variants the dialog opens with focus on **Cancel**, set explicitly in `onOpenAutoFocus` rather than relying on Radix's default, so an accidental Enter cancels. If the server answers 409 `LIMIT_WARNING` (the mandate changed after the screen loaded), the row is restored, the queue refetches and the dialog opens with the new breaches.
+**Why:** Approving past the current mandate is a deliberate exception and should never be a keystroke that sends 5 seconds later.
 
-**Why:** Approving past the current mandate is a deliberate exception and should take one explicit step, never a keystroke that turns into a send 5 seconds later. A checkbox in the panel was considered; it would put a second, different confirmation pattern in the same screen.
-
-**Trade-off:** One more click for warned items, even small ones.
+**Trade-off:** One more click for warned items.
 
 ---
 
 ## D-014: Sidebar waiting count shares the queue's query
 
-**Date:** 2026-10-27 · **Phase:** 3 (approval queue)
+**Phase 3.** The **Approvals** link shows how many are waiting ("Approvals, 12 waiting" for screen readers). It reads the same query as the queue, minus the overlay.
 
-**Decision:** The **Approvals** nav link shows the number waiting (design.md §6.0), with the accessible name "Approvals, 12 waiting" (visible number `aria-hidden`, words in an `sr-only` span). It uses `useWaitingCount()`, which reads the same `useApprovals()` query (`queryKeys.approvals()`) as the queue, minus the review overlay (D-012). `Providers` now wraps the whole `AppShell`, not just the page. No count while loading, after an error, or at 0.
-
-**Why:** One cache entry means one request per poll however many components read it, and the overlay makes the count drop the moment a reviewer acts and go back up on Undo or rollback.
+**Why:** One cache entry means one request per poll. The count also drops and returns with approve, Undo and rollback.
 
 **Trade-offs:**
-- The approvals query now polls every 10 s on **every page** while the tab is visible (`refetchIntervalInBackground: false`; TanStack Query pauses it when the tab is hidden).
-- Also in this phase: `@tanstack/react-table` is pinned to v8 as PLAN.md §2 says (`pnpm add` picked v9, which has a different API), and shadcn's `destructive` button variant is solid with white text, per design.md §3.3.
+- The approvals query polls every 10 s on every page while the tab is visible.
+- Also in this phase: TanStack Table is pinned to v8, as planned.
 
 ---
 
 ## D-015: Verdicts are signed with a per-load key whose kid is its thumbprint
 
-**Date:** 2026-10-27 · **Phase:** 4 (decisions + verdicts)
+**Phase 4.** The mock generates an ES256 key pair on each load, signs every decision with it, and publishes only the public half at `GET /api/jwks`. The `kid` is the RFC 7638 thumbprint. The browser verifies with jose (`lib/verdict/verify.ts`). Failures come back as `signature`, `unknown_key` or `malformed`, each with a plain message.
 
-**Decision:** The mock API generates an ES256 key pair with jose when its db is created (each page load), signs every decision with it (`mocks/db.ts`, `lib/verdict/sign.ts`), and publishes only the public half at `GET /api/jwks`. The `kid` is the key's RFC 7638 JWK thumbprint, not a fixed name. The browser verifies with `createLocalJWKSet` + `jwtVerify` (`lib/verdict/verify.ts`), which never throws: it returns `signature`, `unknown_key` or `malformed` with a plain-language message. This replaces the `alg: "none"` placeholder from D-009.
-
-**Why:**
-- No private key is ever committed (PLAN.md §2 security). The private key only lives in page memory, and `jwkSchema` strips anything but public members, so `d` can't leak through the JWKS.
-- A key-derived kid means a verdict from another load is reported as **unknown key**, not as a generic signature failure. A fixed `demo-1` would match the new key and fail the signature check, which reads as tampering.
+**Why:** No private key is ever committed, and `jwkSchema` strips private members. A key-derived kid reports a verdict from another load as "unknown key", not as tampering.
 
 **Trade-offs:**
-- JWTs differ on every load, so one can't be pasted into jwt.io and verified against a stable key.
-- The mock signs ~200 verdicts at start, so `getDb()` is now async and the first response arrives a few ms later. Held-back requests are signed as they arrive; releases are serialised so concurrent requests can't release one twice.
-- The JWKS comes from the same mock that signs, so the demo proves the mechanism, not trust in an issuer. A real system would pin the issuer's JWKS URL.
-- One test (`main-nav.test.tsx`, fake timers) now waits for the first response before advancing the poll clock, because WebCrypto work isn't covered by fake timers.
+- Tokens differ per load, so one can't be checked on jwt.io against a stable key.
+- Signing ~200 verdicts makes the first response a few ms slower.
+- The JWKS comes from the same mock that signs. The demo proves the mechanism, not trust in an issuer.
 
 ---
 
 ## D-016: A verdict covers the rule decision only, with no expiry
 
-**Date:** 2026-10-27 · **Phase:** 4 (decisions + verdicts)
+**Phase 4.** The signed payload is what the rules said: ids, agent, vendor, amount, chain, mandate and version, outcome, reason code, `iss`, `iat`. Reviews don't re-sign it, and there's no `exp`.
 
-**Decision:** The signed payload is what the rules said when the request was made: decision, request, agent, vendor, amount (minor units as a string), chain, mandate id + version, outcome, reason code, `iss`, `iat` (`lib/verdict/claims.ts`). The review result isn't in it, and approving or rejecting doesn't re-sign. There is no `exp`.
+**Why:** A review is a later human action, and folding it in would mean re-signing history. An expiry would only make old records fail.
 
-**Why:** The review is a later human action; the page shows it next to the verdict, but folding it in would mean re-signing history. A verdict is a record of a past decision, so an expiry would only make old records fail verification.
-
-**Trade-off:** The review result isn't cryptographically provable in this demo. A signed review receipt would be the natural follow-up.
+**Trade-off:** The review result isn't cryptographically provable. A signed review receipt would be the next step.
 
 ---
 
 ## D-017: Tamper flips the outcome and keeps the original signature
 
-**Date:** 2026-10-27 · **Phase:** 4 (decisions + verdicts)
+**Phase 4.** The switch re-encodes the payload with `outcome` flipped (deny/review → allow, allow → deny) and keeps the original header and signature. The changed line is tagged "changed, was …".
 
-**Decision:** The **Tamper with payload** switch re-encodes the payload with `outcome` changed (deny or review → allow, allow → deny) and keeps the original header and signature segments (`tamperVerdict` in `lib/verdict/decode.ts`). The changed line is tagged "changed, was …" in text, the previous result is cleared (a result is kept together with the token it was for), and the encoded token is shown under a disclosure.
+**Why:** Turning a denial into an allow is exactly what a signed verdict must stop.
 
-**Why:** Turning a denial into an allow is the attack a verdict exists to stop, and changing only the payload shows exactly what the signature protects.
-
-**Trade-off:** It's one fixed edit, not a free-form editor. That's enough to show the failure without a JSON editor to build and test.
+**Trade-off:** One fixed edit, not a free-form editor.
 
 ---
 
-## D-018: Decisions list filters live in the URL and run on the server; outcome is a toggle group
+## D-018: Decisions list filters live in the URL and run on the server
 
-**Date:** 2026-10-27 · **Phase:** 4 (decisions + verdicts)
+**Phase 4.** `/decisions?outcome=deny&agent=agt_ops` is read with `useSearchParams` and passed to `GET /api/decisions`. Each combination is its own query, with `keepPreviousData`.
+- The outcome filter is a single-select ToggleGroup, not Tabs: there are no tab panels.
+- Each row has one real link, stretched over the row.
+- 404s aren't retried.
 
-**Decision:**
-- `/decisions?outcome=deny&agent=agt_ops`: filters are read with `useSearchParams` and written with `router.replace` (`features/decisions/use-decision-filters.ts`), then passed to the existing `GET /api/decisions?outcome=&agentId=`. Each filter combination is its own query (`queryKeys.decisions(filters)`) with `keepPreviousData`, so switching doesn't flash skeletons. Pagination (25 per page) is client-side over the filtered result.
-- The outcome filter is a single-select shadcn **ToggleGroup** (radio semantics, labelled "Outcome"), not Tabs: ARIA tabs promise tab panels, and this is one list with a filter.
-- Each row has one real link (agent name), stretched over the row with an `after:` box (DataTable gained a `rowClassName` prop). Its accessible name adds the amount and vendor, so a list of links isn't just repeated agent names.
-- A review in the queue invalidates the decision list and detail caches, so they show the final state.
-- The app's QueryClient doesn't retry 404s (`isNotFound` in `lib/api/client.ts`): asking again won't make a missing decision appear.
-
-**Why:** Back from a decision returns to the same filtered list, and a filtered view can be shared as a link. Server-side filtering uses the contract that already exists.
+**Why:** Back returns to the same filtered list, and a filtered view can be shared.
 
 **Trade-offs:**
-- `useSearchParams` needs a Suspense boundary in the page (`app/decisions/page.tsx`).
-- The page number isn't in the URL, so Back returns to page 1 of the same filter.
-- "View payment ›" links to a placeholder `/payments/[id]` until phase 5.
+- The page number isn't in the URL.
+- `useSearchParams` needs a Suspense boundary.
 
 ---
 
 ## D-019: Real testnet transfers from strangers, with adopted amounts and an address book
 
-**Date:** 2026-10-27 · **Phase:** 5 (payment timeline)
+**Phase 5.** The real-tx slots hold existing small USDC transfers found by `scripts/find-testnet-txs.ts` (read-only RPC). The seed adopts each transfer's amount, and labels its two wallets after the agent and vendor.
+- One slot is a hash that doesn't exist, for "not found".
+- No reverted USDC payment was found, so the failed slot stays simulated. The real Failed state is covered by tests.
 
-**Decision:**
-- The real-tx slots hold **existing recent USDC transfers** found by `scripts/find-testnet-txs.ts` (read-only RPC, no wallet), not transfers sent for this demo. The script first checks the USDC addresses onchain (Base: `symbol()` = USDC, `decimals()` = 6; Solana: the mint has 6 decimals; both also match Circle's docs). It keeps only successful, direct transfers of 1.00 to 9.99 USDC with exactly one USDC movement.
-- **The seed adopts each transfer's amount** (2.00, 1.00, 1.00 USDC replace 2.50, 3.00, 4.00). The scripted requests read it from the slot, so the evaluator re-check (design.md §2.4) still covers them. The page then checks "Matches the approved amount".
-- **Address book (a demo fiction):** the seed names each transfer's two wallets after the request's agent and vendor ("Research Bot wallet", "Weather API wallet") and sends them as `addressLabels` with the payment. Only those addresses get a label. The wallets belong to unknown testnet users.
-- Two slots exist for the error states: `base-missing` (a random hash the script confirmed doesn't exist → "not found") and `base-failed` (a reverted USDC payment call). A scan of ~6,000 Base Sepolia blocks (about 3 hours) found no reverted USDC payment, so `base-failed` has no hash and stays simulated ("Failed (simulated)"). The real Failed state is covered by tests with mocked RPC. They're the two Ops Agent 100.00 payments that were already scripted as `submitted` and `failed`, so their amounts, and the §6.1 numbers that depend on them, don't change.
-- `Payment.submittedAt` (optional) was added for the Submitted step: approval time + 1 minute in the seed.
-
-**Why:** Sending payments would need a funded wallet and a private key, which PLAN.md rules out even on testnet. Adopting the amount keeps header, timeline and chain in agreement without hunting for exact 2.50/3.00/4.00 transfers. Labelling makes the sketch's "sent to Weather API" readable, and limiting labels to the book keeps every other address honest.
+**Why:** Sending payments would need a funded wallet and a private key, which the plan rules out. Adopting the amounts keeps header, timeline and chain in agreement.
 
 **Trade-offs:**
-- The labels are invented. README and this record say so.
-- Devnet can be reset and its RPC can prune history. A missing Solana transaction then shows "not found", which is the right state, and the script can be re-run.
-- Public `sepolia.base.org` only allows 200-block `eth_getLogs` ranges, so the script scans in 200-block chunks. Finding a revert means reading whole blocks, which is slow; the scan length is an argument.
-- Devnet now also serves version 1 transactions, which web3.js v1 can't fetch (RPC error -32015). The script skips them. The app would show one as an RPC error after retries; none of the seeded transactions is v1.
-- The script runs with Node 24's built-in type stripping (`node --no-warnings scripts/find-testnet-txs.ts`), so it needs no `tsx`, but it can't use the `@/` aliases and repeats the two USDC constants.
+- The wallet labels are invented, and the README says so.
+- Devnet can prune history. A missing transaction then shows "not found", and the script can be re-run.
+- web3.js v1 can't fetch v0 transactions. None of the seeded ones are v0.
 
 ---
 
 ## D-020: Onchain reads: lazy clients, cache by finality, retries in one place
 
-**Date:** 2026-10-27 · **Phase:** 5 (payment timeline)
+**Phase 5.**
+- viem and web3.js are only reached through `await import()` in `lib/api/payments.ts`. Other routes never download them.
+- Both chains return one `OnchainTx` shape: pending, not_found, confirmed or failed.
+- Settled transactions are cached forever. Pending ones refetch every 5 s. "Not found" waits for Retry.
+- Library retries are off. TanStack Query retries 3 times with backoff, then shows "rate-limited" or "unreachable" with Retry.
 
-**Decision:**
-- `lib/chain/base.ts` (viem) and `lib/chain/solana.ts` (web3.js) are only reached through `await import()` in the query functions (`lib/api/payments.ts`). Everything else imports `lib/chain/config.ts`, `types.ts` and `errors.ts`, which have no dependencies. So other routes never download viem or web3.js, and the payment page only downloads the one its chain needs.
-- Both clients return one `OnchainTx` shape: `pending`, `not_found`, `confirmed` (with the USDC transfers) or `failed` (with a reason).
-  - Base: receipt → USDC `Transfer` logs (only those emitted by the USDC contract) → block time. No receipt: `eth_getTransactionByHash` tells pending from not found.
-  - Solana: `getSignatureStatus` (history search on) for processed / confirmed / finalized, then `getParsedTransaction` for slot, time, error and token balances. The amount and wallets come from the USDC balance change per owner, which works for `transfer` and `transferChecked` alike.
-- **Caching:** confirmed and failed transactions get `staleTime: Infinity` (a Solana one only once finalized). Pending ones, and confirmed Solana ones not yet finalized, refetch every 5 s. "Not found" is **not polled**: it waits for Retry or a window refocus. Confirmations come from a separate `getBlockNumber` query (30 s), so the receipt stays cached while the count moves.
-- **Errors and rate limits:** library retries are off (viem `retryCount: 0`, web3.js `disableRetryOnRateLimit`). TanStack Query retries RPC errors 3 times with 1 s / 2 s / 4 s backoff, then the card says the public RPC is limiting requests (HTTP 429 / JSON-RPC -32005, found anywhere in the error's cause chain) or unreachable, with Retry. Raw RPC errors are never shown.
-- web3.js gets the platform `fetch` (`Connection({ fetch })`). In Node it otherwise uses its own node-fetch with a keep-alive agent, and the first test run silently hit real devnet past MSW.
-
-**Why:** Public testnet RPCs are slow, lag and rate-limit, so the page asks as rarely as the data allows: never again for settled transactions, every 5 s only while something is settling, and not at all for a hash the RPC doesn't know. One retry policy in one place is easier to reason about and to test than three stacked ones.
+**Why:** Public testnet RPCs are slow and rate-limit, so the page asks as rarely as the data allows. One retry policy is easier to reason about than three stacked ones.
 
 **Trade-offs:**
-- Cache lives for the session (default `gcTime`). A reload asks again.
-- The revert reason isn't shown for Base: receipts don't carry it, and replaying the call costs another request.
-- Two test layers. The unit tests in `lib/chain` drive the real viem and web3.js clients against JSON-RPC fixtures (`mocks/rpc.ts`, no network), so the fixtures must match what the libraries validate. The payment timeline UI test `vi.mock`s both chain modules with `OnchainTx` fixtures and fails if viem or web3.js load at all: importing them there timed out (over 30 s) on Windows. `lib/chain/imports.test.ts` checks that importing the chain modules makes no RPC call; the clients are created on first use.
-- `pnpm-workspace.yaml` denies install scripts for `bufferutil` and `utf-8-validate` (optional WebSocket speed-ups pulled in by web3.js). Reads are HTTP only.
-- `next build` route sizes weren't measured this phase (the dev server was running on the same `.next`). The static check passes: no module outside `lib/chain` imports viem or web3.js. Measure in phase 6.
+- The Base revert reason isn't shown, because it would take another call.
+- Unit tests drive the real clients against JSON-RPC fixtures (`mocks/rpc.ts`). The UI test mocks the chain modules, because importing viem there timed out on Windows.
+- Route sizes, measured in phase 6: `/payments/[id]` first load is 308 kB, below `/approvals` (337 kB). The chain libraries load only when a transaction is fetched.
 
 ---
 
 ## D-021: Timeline times come from the seed, block time only in the onchain card
 
-**Date:** 2026-10-27 · **Phase:** 5 (payment timeline)
+**Phase 5.** The steps show seed times. The onchain card has a **Block time** row from the chain.
 
-**Decision:** Requested, Decision, Approved and Submitted show seed times (which follow "now", D-008). "Confirmed onchain" has no step time. The onchain card has a **Block time** row from the chain, and the header's "· 3 min ago" is the block time.
+**Why:** Seed times move with the day (D-008), but block times are fixed. A block time on the step would soon show a confirmation days *before* the request.
 
-**Why:** Seed times move with the day, block times are fixed. Putting the block time on the step would, a few days after the transactions were found, show a confirmation days *before* the request.
+**Trade-off:** For real transactions, the block time and the "Submitted" time disagree. The row label makes clear which clock it is.
 
-**Trade-off:** The block time and the seed's "Submitted" time disagree for real transactions. Labelling the row "Block time" makes it clear which clock it is.
+---
+
+## D-022: e2e runs against a production build, with test knobs injected before load
+
+**Phase 6.** `pnpm e2e` runs Playwright (Chromium, at 1280px and 375px) against `next build && next start` on port 3100, built into `.next-e2e` (`distDir` from `NEXT_DIST_DIR`).
+- Before the page loads, the tests set `window.__ASC_MOCK__`, which turns off the 10% random failures and shortens latency.
+- Testnet RPC calls are answered from the unit-test fixtures (`mocks/rpc.ts`, through MSW's `getResponse`).
+- Only `pnpm screenshots` reads the live testnet.
+- e2e runs locally, not in CI.
+
+**Why:**
+- A production build is what Vercel serves, so every run also proves that MSW and its worker work in production.
+- A separate build folder never collides with a running dev server.
+- Random failures and public RPCs would make the suite flaky.
+
+**Trade-offs:**
+- Each run builds first, which takes about a minute.
+- The `__ASC_MOCK__` hook ships in the bundle. It only tunes the mock.
+- Next.js adds `.next-e2e/types` to `tsconfig.json`.
+- Without CI, regressions are caught only when someone runs `pnpm e2e`.
+
+---
+
+## D-023: Accessibility fixes from the phase 6 pass
+
+**Phase 6.** Found by axe, the keyboard walkthrough and the 375px checks:
+- **No focus ring on buttons.** shadcn's `outline-none` sets Tailwind v4's `--tw-outline-style: none`, so `focus-visible:outline-2` drew nothing. Fixed by adding `focus-visible:outline-solid` to `Button`. A Tab sweep over every page now checks for a visible indicator at each stop.
+- **Undo unreachable on mobile.** After approving, the sheet opened for the next request and covered the undo toast. It also trapped focus away from the toast. On mobile, the next row is now selected with the sheet closed.
+- **The "full-screen" sheet was 75% wide.** shadcn's `data-[side=right]:w-3/4` beat our `w-full`. Fixed with `data-[side=right]:w-full`.
+- **Verdict code blocks** scroll sideways on phones but couldn't take focus (axe `scrollable-region-focusable`). They now have `tabIndex={0}`.
+- Added `app/not-found.tsx` and `app/error.tsx`.
+
+**Trade-offs:**
+- The code blocks are tab stops on desktop too, where they rarely scroll.
+- The e2e flow moves the mouse off the toast after approving, because a hovered toast pauses and never sends. Check this on a real phone: a tap may leave a hover state under the toast.

@@ -34,6 +34,8 @@ function safeTamper(jwt: string): TamperedVerdict | undefined {
   }
 }
 
+// Code blocks scroll sideways on narrow screens, so they take focus: keyboard
+// users can then scroll them with the arrow keys (WCAG 2.1.1).
 const codeBlock =
   "overflow-x-auto rounded-md border border-border bg-surface-sunken p-3 font-mono text-xs leading-5"
 
@@ -47,7 +49,7 @@ function PayloadBlock({
 }) {
   const entries = Object.entries(payload)
   return (
-    <pre className={codeBlock}>
+    <pre tabIndex={0} className={codeBlock}>
       {"{\n"}
       {entries.map(([key, value], index) => {
         const line = `  ${JSON.stringify(key)}: ${JSON.stringify(value)}${index < entries.length - 1 ? "," : ""}`
@@ -129,7 +131,7 @@ export function VerdictPanel({ jwt }: { jwt: string }) {
             <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Header
             </h3>
-            <pre className={codeBlock}>
+            <pre tabIndex={0} className={codeBlock}>
               {JSON.stringify(decoded.header, null, 2)}
             </pre>
           </div>

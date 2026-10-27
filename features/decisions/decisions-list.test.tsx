@@ -113,6 +113,13 @@ describe("DecisionsList", () => {
     expect(await waitForRows()).toHaveLength(25)
   })
 
+  it("shows an empty state when there are no decisions", async () => {
+    server.use(http.get("*/api/decisions", () => Response.json([])))
+    renderWithProviders(<DecisionsList />)
+    expect(await screen.findByText("No decisions yet")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull()
+  })
+
   it("shows an error with Retry when loading fails", async () => {
     server.use(
       http.get(

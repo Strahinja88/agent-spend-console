@@ -14,7 +14,7 @@ import { DataTable } from "@/components/data/data-table"
 import { EmptyState } from "@/components/data/empty-state"
 import { ErrorState } from "@/components/data/error-state"
 import { useNow } from "@/components/data/relative-time"
-import { SidePanel } from "@/components/data/side-panel"
+import { SidePanel, useIsDesktop } from "@/components/data/side-panel"
 import { Button } from "@/components/ui/button"
 import { useVisibleApprovals } from "@/lib/api/approvals"
 import type { QueueItem } from "@/lib/api/contract"
@@ -60,6 +60,7 @@ export function ApprovalQueue() {
   const { newIds, announcement, clearNew } = useNewArrivals(items)
   const sectionRef = useRef<HTMLElement>(null)
   const now = useNow(5_000)
+  const isDesktop = useIsDesktop()
 
   const filtered = useMemo(
     () =>
@@ -111,9 +112,9 @@ export function ApprovalQueue() {
   }, [focusRequest])
 
   const select = useCallback(
-    (id: string | undefined, { focus = true } = {}) => {
+    (id: string | undefined, { focus = true, open = true } = {}) => {
       setSelectedId(id)
-      setPanelOpen(id !== undefined)
+      setPanelOpen(open && id !== undefined)
       setRejecting(false)
       if (id) clearNew(id)
       if (focus) setFocusRequest({ id })
@@ -129,7 +130,9 @@ export function ApprovalQueue() {
       if (id !== selectedIdRef.current) return
       const ids = rowIdsRef.current
       const index = ids.indexOf(id)
-      select(ids[index + 1] ?? ids[index - 1])
+      // On mobile the panel is a modal sheet that would cover the undo toast,
+      // so the next row is selected with the sheet closed.
+      select(ids[index + 1] ?? ids[index - 1], { open: isDesktop })
     },
     onRestore: (id) => select(id),
     onLimitWarning: (id) => {
