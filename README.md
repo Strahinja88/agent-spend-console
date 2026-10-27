@@ -8,6 +8,10 @@ A portfolio demo of a finance console for AI-agent payments. AI agents ask to pa
 
 **Live demo:** https://agent-spend-console-demo.vercel.app
 
+[![CI](https://github.com/Strahinja88/agent-spend-console/actions/workflows/ci.yml/badge.svg)](https://github.com/Strahinja88/agent-spend-console/actions/workflows/ci.yml)
+
+![Approval queue with the review panel open](docs/screenshots/approvals-light.png)
+
 > **Not affiliated with any company.** Concepts (mandates, signed verdicts, review thresholds) are modelled generically; decision codes are invented. Testnet only and read-only onchain: no wallets, no private keys, no mainnet.
 
 ## Screenshots
