@@ -38,10 +38,11 @@ So **a request only goes to review if it passes all hard limits.** A reviewer ne
 
 Definitions:
 - **Limits are inclusive** ("up to 500.00 USDC per day" allows exactly 500.00). **The review threshold is strict** ("above 100.00 USDC").
-- **Committed spend** for a period = allowed + approved-after-review + waiting-for-review amounts in that period. Denied and rejected requests don't count. Counting waiting requests reserves their amount, so approving everything in the queue can't exceed a limit, and approval doesn't need to re-evaluate.
+- **Committed spend** for a period = allowed + approved-after-review + waiting-for-review amounts in that period. Denied and rejected requests don't count (a rejected one stops counting from the moment it's rejected). Counting waiting requests reserves their amount, so approving everything in the queue can't exceed the limits the requests were evaluated under (D-006).
+- **Approval re-check:** if the agent's mandate has been replaced or revoked since the request, approving re-checks the hard rules against the *current* mandate and warns on any breach (D-007).
 - Periods are UTC calendar days and months.
 
-The reason codes are invented (PLAN.md disclaimer). The final list is fixed in phase 2 in `lib/domain`.
+The reason codes are invented (PLAN.md disclaimer). The final list is `reasonCodeSchema` in `lib/domain/schemas.ts`: the five above plus `REVIEW_THRESHOLD` and `WITHIN_LIMITS`.
 
 ### 2.2 Display states
 
@@ -57,7 +58,7 @@ The decision `outcome` is what the rules said. The **display state** is what use
 
 Rejection details (reviewer and reason) are shown on the decision detail page, not in the pill.
 
-> **Phase 2 note:** PLAN §3's `Decision` has `reviewedBy`/`reviewedAt` but no review result or reject reason. Phase 2 adds `reviewResult?: 'approved' | 'rejected'` and `reviewReason?: string` rather than deriving the result from `Payment.status`.
+> PLAN §3's `Decision` has `reviewedBy`/`reviewedAt` but no review result or reject reason, so `reviewResult?: 'approved' | 'rejected'` and `reviewReason?: string` were added (D-009). `displayState()` in `lib/domain/display-state.ts` implements this table.
 
 ### 2.3 Example mandates (used by every sketch, and by the seed)
 
@@ -67,8 +68,14 @@ Rejection details (reviewer and reason) are shown on the decision detail page, n
 | Ops Agent | v2 · M. Ilić, 12 Oct · **replaced 20 Oct** | 200.00 | 500.00 | Weather API, Cloud GPU | 100.00 | Base, Solana |
 | Ops Agent | v3 · J. Perić, 20 Oct · current | 2,000.00 | 3,000.00 | Weather API, Cloud GPU, Data Vendor | 100.00 | Base, Solana |
 | Travel Agent | v1 · J. Perić, 1 Oct | 1,500.00 | 3,000.00 | Airline X, Hotel Y | 250.00 | Base |
+| Support Bot | v1 · J. Perić, 27 Sep · **replaced 27 Oct 11:00** | 300.00 | 1,000.00 | Helpdesk SaaS, SMS Gateway | 150.00 | Base, Solana |
+| Support Bot | v2 · M. Ilić, 27 Oct 11:00 · current | 300.00 | **400.00** | Helpdesk SaaS, SMS Gateway | 150.00 | Base, Solana |
+| Marketing Agent | v1 · M. Ilić, 27 Sep | 500.00 | 1,500.00 | Ad Network, Design Studio | 300.00 | Solana |
+| Data Pipeline | v1 · J. Perić, 27 Sep | 100.00 | 300.00 (and 1,500.00 per month) | Data Vendor, Cloud GPU | none | Base |
 
-All amounts are in USDC. "Today" in the sketches is 27 Oct.
+All amounts are in USDC. "Today" in the sketches is 27 Oct. The deployed demo moves these dates with the current day (D-008).
+
+Support Bot has a 250.00 request from v1 still waiting when v2 lowers the daily limit, so the queue shows an approval limit warning for it (D-007). Data Pipeline has the only monthly limit and no review threshold.
 
 ### 2.4 Seed rules (binding for phase 2)
 
@@ -435,7 +442,7 @@ Example: Research Bot paid 120.00 USDC to Weather API on 26 Oct. It was above th
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Block, hash and addresses here are placeholders. Phase 5 replaces them with the real testnet transactions.
+Block, hash and addresses here are placeholders. Phase 5 replaces them with the real testnet transactions. In the seed only three small payments (2.50, 3.00 and 4.00 USDC, see `mocks/seed/tx-slots.ts`) get a real transaction. All other payments, including this 120.00, are `simulated` and show "Simulated payment, no onchain transaction" instead of the onchain card (D-009).
 
 Solana variant: "Slot 312,550,904 · Finalized" instead of block/confirmations; addresses are base58.
 
