@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+pnpm-workspace.yaml
+next-env.d.ts
+.next
+coverage
+# Markdown is hand-formatted (tables, ASCII sketches)
+*.md

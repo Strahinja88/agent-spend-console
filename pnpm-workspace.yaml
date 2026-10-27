@@ -1,0 +1,4 @@
+# Packages allowed to run install scripts (pnpm blocks all others by default).
+allowBuilds:
+  unrs-resolver: true
+  sharp: true
