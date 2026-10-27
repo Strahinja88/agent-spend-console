@@ -450,16 +450,31 @@ Example: Research Bot paid 120.00 USDC to Weather API on 26 Oct. It was above th
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Block, hash and addresses here are placeholders. Phase 5 replaces them with the real testnet transactions. In the seed only three small payments (2.50, 3.00 and 4.00 USDC, see `mocks/seed/tx-slots.ts`) get a real transaction. All other payments, including this 120.00, are `simulated` and show "Simulated payment, no onchain transaction" instead of the onchain card (D-009).
+The sketch uses the 120.00 example for its numbers; that payment is `simulated` in the seed and shows "Simulated payment, no onchain transaction" instead of the onchain card (D-009). Only the slot payments in `mocks/seed/tx-slots.ts` have real testnet transactions (D-019):
 
-Solana variant: "Slot 312,550,904 · Finalized" instead of block/confirmations; addresses are base58.
+| Slot | Payment | Onchain |
+|---|---|---|
+| `base-1` | Research Bot → Weather API, day before anchor | 2.00 USDC, Base Sepolia block 50,979,128 |
+| `base-2` | Research Bot → Data Vendor, anchor day | 1.00 USDC, Base Sepolia block 50,978,949 |
+| `solana-1` | Research Bot → Weather API, day before anchor | 1.00 USDC, Solana devnet slot 515,751,111 |
+| `base-failed` | Ops Agent → Weather API 100.00, anchor day | none found in ~6,000 blocks, so simulated ("Failed (simulated)") |
+| `base-missing` | Ops Agent → Cloud GPU 100.00, anchor day | a hash that doesn't exist → "not found" |
+
+The real card differs from the sketch in three ways:
+- **Amount check.** Under the amount: `✓ Matches the approved amount`, or `⚠ Doesn't match the approved 120.00 USDC` (icon + text).
+- **Labels.** "Research Bot wallet" / "Weather API wallet" come from the seed's address book (`addressLabels` on `GET /api/payments/:id`); unknown addresses show without a label.
+- **Times (D-021).** Requested, Decision, Approved and Submitted show seed times. "Confirmed onchain" has no step time; the card has a **Block time** row from the chain, and the header's "· 3 min ago" is the block time.
+
+Solana variant: the row is **Slot** "515,751,111 · Finalized" (or "Confirmed, not yet finalized") instead of **Block** "50,979,128 · 42 confirmations"; addresses are base58 wallet owners.
 
 States:
-- **Pending** (submitted, not confirmed): the last step shows `◌ Waiting for confirmation` and the step stays "In progress".
-- **Failed**: `✕ Failed onchain` with the reason if the RPC returns one, plus an explorer link.
-- **Not found**: `◌ Transaction not found on Base Sepolia` with a note that testnet RPCs can lag, plus **Retry**.
-- **Not yet submitted** (waiting for review / rejected after review): later steps are "Not reached", greyed, with text.
-- Loading: timeline skeleton with 5 steps.
+- **Pending** (submitted, not confirmed): the last step shows `◌ Waiting for confirmation` and the step stays "In progress". Checked again every 5 s.
+- **Failed**: `✕ Failed onchain` with the reason (Base: "reverted"; Solana: the instruction error), block/slot, block time, explorer link.
+- **Not found**: `◌ Transaction not found on Base Sepolia` with a note that testnet RPCs can lag, plus **Retry** and the explorer link. Not polled (D-020).
+- **RPC unavailable / rate-limited**: after 3 retries with backoff, "The public Base Sepolia RPC is limiting requests right now. Try again in a moment." with **Retry**. The rest of the timeline stays usable.
+- **Not yet submitted** (waiting for review / rejected after review / denied): later steps are "Not reached", greyed, with text.
+- **Approved in this session**: the queue's approve doesn't send anything onchain, so Submitted says so and stays "Not reached".
+- Loading: timeline skeleton with 5 steps; the onchain card has its own skeleton while the RPC answers.
 
 Mobile: works as-is (single column), but the address label wraps above the address.
 

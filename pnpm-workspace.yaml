@@ -2,3 +2,6 @@
 allowBuilds:
   unrs-resolver: true
   sharp: true
+  # Optional native WebSocket speed-ups pulled in by @solana/web3.js (ws). Not needed: reads are HTTP only.
+  bufferutil: false
+  utf-8-validate: false

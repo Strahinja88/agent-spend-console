@@ -40,6 +40,8 @@ type MockDb = {
   agents: Agent[]
   mandates: Mandate[]
   entries: SeedEntry[]
+  /** Wallet names for the real testnet transfers (D-019). */
+  addressLabels: Record<string, string>
   startedAt: number
   heldBack: HeldBackRequest[]
   nextId: number
@@ -69,6 +71,7 @@ async function createDb(): Promise<MockDb> {
     agents: seed.agents,
     mandates: seed.mandates,
     entries: await Promise.all(seed.entries.map((e) => signed(e, key))),
+    addressLabels: seed.addressLabels,
     startedAt: now,
     heldBack: [...HELD_BACK],
     nextId: 1,

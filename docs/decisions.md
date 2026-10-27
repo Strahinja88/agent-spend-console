@@ -124,7 +124,7 @@ Added under this rule in phase 1, following the standard Next.js + Vitest setup:
 **Decision:**
 - `Decision.reviewResult?: 'approved' | 'rejected'` and `Decision.reviewReason?: string`, as noted in `docs/design.md` §2.2, instead of deriving the review result from `Payment.status`.
 - `Payment.simulated: boolean`. Only 2–3 seed payments get real testnet transactions (PLAN.md §3). The rest have no `txHash` and `simulated: true`, and phase 5 shows "Simulated payment, no onchain transaction" for them.
-- Real-tx slots (`mocks/seed/tx-slots.ts`) are small payments (2.50, 3.00 and 4.00 USDC) so faucet USDC covers them. A slot stays simulated until its hash is filled in.
+- Real-tx slots (`mocks/seed/tx-slots.ts`) are small payments (2.50, 3.00 and 4.00 USDC) so faucet USDC covers them. A slot stays simulated until its hash is filled in. (Phase 5 filled them with existing transfers and adopted their amounts instead, see D-019.)
 - `verdictJwt` is an unsigned JWT-shaped placeholder (`alg: "none"`) until phase 4 signs verdicts with jose.
 
 **Why:** Fake but well-formed hashes would make every other payment show "Transaction not found" in phase 5. An explicit flag is honest and saves pointless RPC calls.
@@ -261,3 +261,61 @@ Added under this rule in phase 1, following the standard Next.js + Vitest setup:
 - `useSearchParams` needs a Suspense boundary in the page (`app/decisions/page.tsx`).
 - The page number isn't in the URL, so Back returns to page 1 of the same filter.
 - "View payment ›" links to a placeholder `/payments/[id]` until phase 5.
+
+---
+
+## D-019: Real testnet transfers from strangers, with adopted amounts and an address book
+
+**Date:** 2026-10-27 · **Phase:** 5 (payment timeline)
+
+**Decision:**
+- The real-tx slots hold **existing recent USDC transfers** found by `scripts/find-testnet-txs.ts` (read-only RPC, no wallet), not transfers sent for this demo. The script first checks the USDC addresses onchain (Base: `symbol()` = USDC, `decimals()` = 6; Solana: the mint has 6 decimals; both also match Circle's docs). It keeps only successful, direct transfers of 1.00 to 9.99 USDC with exactly one USDC movement.
+- **The seed adopts each transfer's amount** (2.00, 1.00, 1.00 USDC replace 2.50, 3.00, 4.00). The scripted requests read it from the slot, so the evaluator re-check (design.md §2.4) still covers them. The page then checks "Matches the approved amount".
+- **Address book (a demo fiction):** the seed names each transfer's two wallets after the request's agent and vendor ("Research Bot wallet", "Weather API wallet") and sends them as `addressLabels` with the payment. Only those addresses get a label. The wallets belong to unknown testnet users.
+- Two slots exist for the error states: `base-missing` (a random hash the script confirmed doesn't exist → "not found") and `base-failed` (a reverted USDC payment call). A scan of ~6,000 Base Sepolia blocks (about 3 hours) found no reverted USDC payment, so `base-failed` has no hash and stays simulated ("Failed (simulated)"). The real Failed state is covered by tests with mocked RPC. They're the two Ops Agent 100.00 payments that were already scripted as `submitted` and `failed`, so their amounts, and the §6.1 numbers that depend on them, don't change.
+- `Payment.submittedAt` (optional) was added for the Submitted step: approval time + 1 minute in the seed.
+
+**Why:** Sending payments would need a funded wallet and a private key, which PLAN.md rules out even on testnet. Adopting the amount keeps header, timeline and chain in agreement without hunting for exact 2.50/3.00/4.00 transfers. Labelling makes the sketch's "sent to Weather API" readable, and limiting labels to the book keeps every other address honest.
+
+**Trade-offs:**
+- The labels are invented. README and this record say so.
+- Devnet can be reset and its RPC can prune history. A missing Solana transaction then shows "not found", which is the right state, and the script can be re-run.
+- Public `sepolia.base.org` only allows 200-block `eth_getLogs` ranges, so the script scans in 200-block chunks. Finding a revert means reading whole blocks, which is slow; the scan length is an argument.
+- Devnet now also serves version 1 transactions, which web3.js v1 can't fetch (RPC error -32015). The script skips them. The app would show one as an RPC error after retries; none of the seeded transactions is v1.
+- The script runs with Node 24's built-in type stripping (`node --no-warnings scripts/find-testnet-txs.ts`), so it needs no `tsx`, but it can't use the `@/` aliases and repeats the two USDC constants.
+
+---
+
+## D-020: Onchain reads: lazy clients, cache by finality, retries in one place
+
+**Date:** 2026-10-27 · **Phase:** 5 (payment timeline)
+
+**Decision:**
+- `lib/chain/base.ts` (viem) and `lib/chain/solana.ts` (web3.js) are only reached through `await import()` in the query functions (`lib/api/payments.ts`). Everything else imports `lib/chain/config.ts`, `types.ts` and `errors.ts`, which have no dependencies. So other routes never download viem or web3.js, and the payment page only downloads the one its chain needs.
+- Both clients return one `OnchainTx` shape: `pending`, `not_found`, `confirmed` (with the USDC transfers) or `failed` (with a reason).
+  - Base: receipt → USDC `Transfer` logs (only those emitted by the USDC contract) → block time. No receipt: `eth_getTransactionByHash` tells pending from not found.
+  - Solana: `getSignatureStatus` (history search on) for processed / confirmed / finalized, then `getParsedTransaction` for slot, time, error and token balances. The amount and wallets come from the USDC balance change per owner, which works for `transfer` and `transferChecked` alike.
+- **Caching:** confirmed and failed transactions get `staleTime: Infinity` (a Solana one only once finalized). Pending ones, and confirmed Solana ones not yet finalized, refetch every 5 s. "Not found" is **not polled**: it waits for Retry or a window refocus. Confirmations come from a separate `getBlockNumber` query (30 s), so the receipt stays cached while the count moves.
+- **Errors and rate limits:** library retries are off (viem `retryCount: 0`, web3.js `disableRetryOnRateLimit`). TanStack Query retries RPC errors 3 times with 1 s / 2 s / 4 s backoff, then the card says the public RPC is limiting requests (HTTP 429 / JSON-RPC -32005, found anywhere in the error's cause chain) or unreachable, with Retry. Raw RPC errors are never shown.
+- web3.js gets the platform `fetch` (`Connection({ fetch })`). In Node it otherwise uses its own node-fetch with a keep-alive agent, and the first test run silently hit real devnet past MSW.
+
+**Why:** Public testnet RPCs are slow, lag and rate-limit, so the page asks as rarely as the data allows: never again for settled transactions, every 5 s only while something is settling, and not at all for a hash the RPC doesn't know. One retry policy in one place is easier to reason about and to test than three stacked ones.
+
+**Trade-offs:**
+- Cache lives for the session (default `gcTime`). A reload asks again.
+- The revert reason isn't shown for Base: receipts don't carry it, and replaying the call costs another request.
+- Two test layers. The unit tests in `lib/chain` drive the real viem and web3.js clients against JSON-RPC fixtures (`mocks/rpc.ts`, no network), so the fixtures must match what the libraries validate. The payment timeline UI test `vi.mock`s both chain modules with `OnchainTx` fixtures and fails if viem or web3.js load at all: importing them there timed out (over 30 s) on Windows. `lib/chain/imports.test.ts` checks that importing the chain modules makes no RPC call; the clients are created on first use.
+- `pnpm-workspace.yaml` denies install scripts for `bufferutil` and `utf-8-validate` (optional WebSocket speed-ups pulled in by web3.js). Reads are HTTP only.
+- `next build` route sizes weren't measured this phase (the dev server was running on the same `.next`). The static check passes: no module outside `lib/chain` imports viem or web3.js. Measure in phase 6.
+
+---
+
+## D-021: Timeline times come from the seed, block time only in the onchain card
+
+**Date:** 2026-10-27 · **Phase:** 5 (payment timeline)
+
+**Decision:** Requested, Decision, Approved and Submitted show seed times (which follow "now", D-008). "Confirmed onchain" has no step time. The onchain card has a **Block time** row from the chain, and the header's "· 3 min ago" is the block time.
+
+**Why:** Seed times move with the day, block times are fixed. Putting the block time on the step would, a few days after the transactions were found, show a confirmation days *before* the request.
+
+**Trade-off:** The block time and the seed's "Submitted" time disagree for real transactions. Labelling the row "Block time" makes it clear which clock it is.

@@ -142,6 +142,7 @@ export const handlers = [
     return send(paymentDetailResponse, {
       ...entry,
       agent: findAgent(db, entry.request.agentId),
+      addressLabels: db.addressLabels,
     })
   }),
 

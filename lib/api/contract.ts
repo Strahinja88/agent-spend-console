@@ -100,6 +100,8 @@ export const paymentDetailResponse = z.object({
   decision: decisionSchema,
   request: paymentRequestSchema,
   agent: agentSchema,
+  /** Known wallet names by `addressKey`, for the onchain card (D-019). */
+  addressLabels: z.record(z.string(), z.string()),
 })
 
 /** POST /api/decisions/:id/approve */

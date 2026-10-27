@@ -7,3 +7,11 @@ export function truncateMiddle(value: string): string {
   if (value.length <= head + tail + 1) return value
   return `${value.slice(0, head)}…${value.slice(-tail)}`
 }
+
+/**
+ * A lookup key for an address: EVM addresses are case-insensitive (the case is
+ * only a checksum), base58 is case-sensitive and stays as it is.
+ */
+export function addressKey(address: string): string {
+  return address.startsWith("0x") ? address.toLowerCase() : address
+}

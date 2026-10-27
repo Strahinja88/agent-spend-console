@@ -1,4 +1,4 @@
-import type { Outcome } from "@/lib/domain/types"
+import type { Chain, Outcome } from "@/lib/domain/types"
 
 // One place for query keys, so every screen that reads the same data shares
 // one cache entry (and one poll).
@@ -15,4 +15,11 @@ export const queryKeys = {
   decisionDetails: () => ["decision"] as const,
   decision: (id: string) => ["decision", id] as const,
   jwks: () => ["jwks"] as const,
+  /** Prefix of every payment detail, for invalidation. */
+  payments: () => ["payment"] as const,
+  payment: (id: string) => ["payment", id] as const,
+  /** Onchain reads, keyed by what they read, not by payment (D-020). */
+  onchainTx: (chain: Chain, hash: string) =>
+    ["chain", chain, "tx", hash] as const,
+  baseBlockNumber: () => ["chain", "base", "blockNumber"] as const,
 }

@@ -8,6 +8,7 @@ import type {
   Payment,
   PaymentRequest,
 } from "@/lib/domain/types"
+import { addressKey } from "@/lib/format/address"
 import { usdc } from "@/lib/format/amount"
 
 import { createRng, type Rng } from "../prng"
@@ -36,6 +37,8 @@ export type Seed = {
   mandates: Mandate[]
   /** Chronological. Every decision is exactly what `evaluate` returns (design.md §2.4). */
   entries: SeedEntry[]
+  /** Wallet names for the real testnet transfers, by `addressKey` (D-019). */
+  addressLabels: Record<string, string>
 }
 
 /** Fixed anchor used by tests and matching the sketches in docs/design.md. */
@@ -213,20 +216,54 @@ function paymentFor(
     return { ...base, status: "pending_approval", simulated: true }
   }
 
-  const option = scripted?.payment
-  if (option && "slot" in option) {
-    const slot: TxSlot = TX_SLOTS[option.slot]
-    if (slot.chain !== request.chain) {
-      throw new Error(
-        `Slot ${option.slot} is on ${slot.chain}, request on ${request.chain}`,
-      )
-    }
-    // Until phase 5 fills the hash, a slot payment is simulated like the rest
-    return slot.txHash
-      ? { ...base, status: "confirmed", txHash: slot.txHash, simulated: false }
-      : { ...base, status: "confirmed", simulated: true }
+  // Sent a minute after it was approved (by the rules or by a reviewer)
+  const approvedAt = decision.reviewedAt ?? decision.decidedAt
+  const sent = {
+    ...base,
+    submittedAt: new Date(Date.parse(approvedAt) + MINUTE).toISOString(),
   }
-  return { ...base, status: option?.status ?? "confirmed", simulated: true }
+
+  const key = scripted?.payment?.slot
+  if (!key) return { ...sent, status: "confirmed", simulated: true }
+
+  const slot: TxSlot = TX_SLOTS[key]
+  if (slot.chain !== request.chain) {
+    throw new Error(
+      `Slot ${key} is on ${slot.chain}, request on ${request.chain}`,
+    )
+  }
+  // The status the mock reports; the page reads the real one from the chain
+  const status = SLOT_STATUS[slot.kind]
+  // Without a hash, a slot payment is simulated like the rest
+  return slot.txHash
+    ? { ...sent, status, txHash: slot.txHash, simulated: false }
+    : { ...sent, status, simulated: true }
+}
+
+const SLOT_STATUS = {
+  transfer: "confirmed",
+  failed: "failed",
+  missing: "submitted",
+} as const satisfies Record<TxSlot["kind"], Payment["status"]>
+
+/**
+ * Names for the wallets in real transfers, so the timeline can say "Weather
+ * API wallet" (D-019). Keys are normalised (`addressKey`).
+ */
+function addressLabels(
+  entries: SeedEntry[],
+  scripted: Map<string, ScriptedRequest>,
+) {
+  const labels: Record<string, string> = {}
+  for (const { request } of entries) {
+    const key = scripted.get(request.id)?.payment?.slot
+    const slot = key && TX_SLOTS[key]
+    if (!slot || slot.kind !== "transfer" || !slot.txHash) continue
+    const agent = AGENTS.find((a) => a.id === request.agentId)
+    if (agent) labels[addressKey(slot.from)] = `${agent.name} wallet`
+    labels[addressKey(slot.to)] = `${request.vendor} wallet`
+  }
+  return labels
 }
 
 /** Builds the whole seed. Same anchor in, same data out. */
@@ -242,8 +279,10 @@ export function generateSeed(anchor: string = DEFAULT_ANCHOR): Seed {
   ].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
 
   const entries: SeedEntry[] = []
+  const scriptedById = new Map<string, ScriptedRequest>()
   for (const { scripted, review, ...fields } of candidates) {
     const request: PaymentRequest = { id: `req_${ids.hex(8)}`, ...fields }
+    if (scripted) scriptedById.set(request.id, scripted)
     let decision = decide(request, mandates, entries, `dec_${ids.hex(8)}`)
 
     if (scripted && decision.reasonCode !== scripted.expect) {
@@ -270,5 +309,11 @@ export function generateSeed(anchor: string = DEFAULT_ANCHOR): Seed {
     entries.push({ request, decision, payment })
   }
 
-  return { anchor, agents: AGENTS, mandates, entries }
+  return {
+    anchor,
+    agents: AGENTS,
+    mandates,
+    entries,
+    addressLabels: addressLabels(entries, scriptedById),
+  }
 }

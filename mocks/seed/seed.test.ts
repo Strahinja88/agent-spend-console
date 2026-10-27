@@ -11,9 +11,11 @@ import {
   paymentSchema,
 } from "@/lib/domain/schemas"
 import { activeMandate, committedSpend } from "@/lib/domain/spend"
+import { addressKey } from "@/lib/format/address"
 import { usdc } from "@/lib/format/amount"
 
 import { DEFAULT_ANCHOR, generateSeed, seedAnchor } from "./generate"
+import { TX_SLOTS } from "./tx-slots"
 
 const seed = generateSeed()
 const waiting = seed.entries.filter((e) => isWaitingForReview(e.decision))
@@ -197,5 +199,52 @@ describe("seedAnchor", () => {
     ]) {
       expect(() => generateSeed(`${day}T14:00:00.000Z`)).not.toThrow()
     }
+  })
+})
+
+describe("tx slots (D-019)", () => {
+  const sent = seed.entries.filter((e) => !e.payment.simulated)
+
+  it("attach well-formed hashes to the payments that use them", () => {
+    for (const slot of Object.values(TX_SLOTS)) {
+      if (!slot.txHash) continue
+      expect(slot.txHash).toMatch(
+        slot.chain === "base"
+          ? /^0x[0-9a-f]{64}$/
+          : /^[1-9A-HJ-NP-Za-km-z]{86,88}$/,
+      )
+      const entry = sent.find((e) => e.payment.txHash === slot.txHash)
+      expect(entry?.payment.chain).toBe(slot.chain)
+    }
+  })
+
+  it("use the onchain amount of each real transfer, kept small", () => {
+    for (const slot of Object.values(TX_SLOTS)) {
+      if (slot.kind !== "transfer" || !slot.txHash) continue
+      const entry = sent.find((e) => e.payment.txHash === slot.txHash)
+      expect(entry?.request.amount).toBe(usdc(slot.amount))
+      expect(entry?.payment.status).toBe("confirmed")
+      expect(usdc(slot.amount)).toBeLessThan(usdc("10"))
+    }
+  })
+
+  it("report a failed and a submitted payment for the error demos", () => {
+    const missing = sent.find(
+      (e) => e.payment.txHash === TX_SLOTS["base-missing"].txHash,
+    )
+    expect(missing?.payment.status).toBe("submitted")
+    const failed = TX_SLOTS["base-failed"]
+    if (failed.txHash) {
+      const entry = sent.find((e) => e.payment.txHash === failed.txHash)
+      expect(entry?.payment.status).toBe("failed")
+    }
+  })
+
+  it("name the wallets of real transfers after the agent and vendor", () => {
+    const slot = TX_SLOTS["base-1"]
+    expect(seed.addressLabels[addressKey(slot.from)]).toBe(
+      "Research Bot wallet",
+    )
+    expect(seed.addressLabels[addressKey(slot.to)]).toBe("Weather API wallet")
   })
 })

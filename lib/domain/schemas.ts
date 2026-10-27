@@ -103,4 +103,6 @@ export const paymentSchema = z.object({
   status: paymentStatusSchema,
   // true = demo data with no onchain transaction behind it (D-009)
   simulated: z.boolean(),
+  // Not in PLAN.md §3: when it was sent to the chain (D-019)
+  submittedAt: isoDateTime.optional(),
 })

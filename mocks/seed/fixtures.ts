@@ -1,7 +1,7 @@
 import type { Agent, Chain, Mandate, ReasonCode } from "@/lib/domain/types"
 import { usdc } from "@/lib/format/amount"
 
-import type { TxSlotKey } from "./tx-slots"
+import { TX_SLOTS, type TxSlotKey } from "./tx-slots"
 
 // Hand-written part of the seed: agents, mandates and the scripted requests
 // behind every sketch in docs/design.md §6. Times are relative to the anchor
@@ -169,7 +169,8 @@ export type ScriptedRequest = {
     afterMinutes: number
     reason?: string
   }
-  payment?: { status: "failed" | "submitted" } | { slot: TxSlotKey }
+  /** A real (or deliberately missing) testnet transaction behind the payment. */
+  payment?: { slot: TxSlotKey }
 }
 
 export const SCRIPTED: ScriptedRequest[] = [
@@ -220,7 +221,7 @@ export const SCRIPTED: ScriptedRequest[] = [
   {
     agentId: "agt_research",
     vendor: "Weather API",
-    amount: "2.50",
+    amount: TX_SLOTS["base-1"].amount,
     chain: "base",
     at: [-1, "10:12"],
     expect: "WITHIN_LIMITS",
@@ -229,7 +230,7 @@ export const SCRIPTED: ScriptedRequest[] = [
   {
     agentId: "agt_research",
     vendor: "Weather API",
-    amount: "3.00",
+    amount: TX_SLOTS["solana-1"].amount,
     chain: "solana",
     at: [-1, "11:30"],
     expect: "WITHIN_LIMITS",
@@ -284,7 +285,7 @@ export const SCRIPTED: ScriptedRequest[] = [
     chain: "base",
     at: [0, "09:40"],
     expect: "WITHIN_LIMITS",
-    payment: { status: "failed" },
+    payment: { slot: "base-failed" },
   },
   {
     agentId: "agt_ops",
@@ -293,7 +294,7 @@ export const SCRIPTED: ScriptedRequest[] = [
     chain: "base",
     at: [0, "11:05"],
     expect: "WITHIN_LIMITS",
-    payment: { status: "submitted" },
+    payment: { slot: "base-missing" },
   },
   {
     agentId: "agt_ops",
@@ -313,11 +314,11 @@ export const SCRIPTED: ScriptedRequest[] = [
     expect: "REVIEW_THRESHOLD",
   },
 
-  // Research Bot: 4.00 slot, 150.00 and 120.00 waiting (354.00 of 500.00 committed)
+  // Research Bot: a real-tx slot, 150.00 and 120.00 waiting (all within 500.00 committed)
   {
     agentId: "agt_research",
     vendor: "Data Vendor",
-    amount: "4.00",
+    amount: TX_SLOTS["base-2"].amount,
     chain: "base",
     at: [0, "09:05"],
     expect: "WITHIN_LIMITS",
