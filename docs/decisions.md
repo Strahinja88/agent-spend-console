@@ -140,3 +140,62 @@ Added under this rule in phase 1, following the standard Next.js + Vitest setup:
 **Why:** `JSON.stringify` throws on bigint, and JSON numbers lose precision above 2^53. The codec rejects JSON numbers, so an amount can never pass through a float. One schema for both directions means the mock and client can't disagree on the format.
 
 **Trade-off:** Wire payloads aren't directly readable as amounts ("120000000", not "120.00"), which is the usual choice for token amounts.
+
+---
+
+## D-011: The mock API runs in every build, production included
+
+**Date:** 2026-10-27 · **Phase:** 3 (approval queue)
+
+**Decision:** MSW's service worker starts in the browser in development *and* in the deployed build. `MockProvider` (`components/mock-provider.tsx`) loads `components/mock-worker.tsx` with `next/dynamic` and `ssr: false`, and exposes an "API ready" flag (`lib/api/api-ready.ts`). Queries use `enabled: ready`, so nothing fetches before the worker is up, and pages render their skeletons meanwhile.
+
+**Why:** There is no real backend (PLAN.md §1 non-goals), so without MSW the Vercel demo would have no data. `ssr: false` is required, not a preference: MSW 3 exports `msw/browser` with `"node": null`, so a plain dynamic import inside a client component fails the server build.
+
+**Trade-offs:**
+- Every visitor downloads MSW and the seed (part of the 34.6 kB on `/approvals`) and registers a service worker on the site's origin. Fine for a demo; a real product would swap the provider for a real API.
+- First data arrives after the worker registers (a few hundred ms on a cold load). If the worker fails to start, queries run anyway and screens show their error state instead of loading forever.
+- Mock state lives in the page: a reload starts over from the seed (as designed in phase 2).
+
+---
+
+## D-012: Optimistic review through a shared hidden-id overlay; approvals sent from the toast
+
+**Date:** 2026-10-27 · **Phase:** 3 (approval queue)
+
+**Decision:**
+- Approve/reject don't edit the TanStack Query cache. They add the decision id to a small module-level set (`lib/api/review-overlay.ts`, read with `useSyncExternalStore`); the queue and the sidebar count filter it out. Rollback removes the id. A fetch that no longer lists an id prunes it.
+- Deferred approvals (≤ 1,000.00 USDC, no limit warning) live in `features/approvals/pending-approvals.ts`. Every path that sends goes through `commitApproval`, which removes the entry first, so nothing sends twice.
+- **Undo is the only way to cancel.** The toast's auto-close sends (design.md §6.1), and so does any other dismissal (swipe away, `toast.dismiss` when leaving the page). Sonner calls `onDismiss` for those, not `onAutoClose`.
+- Requests are plain async functions over the shared `QueryClient` rather than `useMutation`, because a deferred approval must still send, and roll back, after the queue unmounts.
+
+**Why:** Polling makes cache edits fragile: a poll that lands during the undo window or while a request is in flight would bring the row back. The overlay keeps hidden rows hidden whatever the poll returns (design.md §6.1), works the same for the queue and the sidebar, and makes rollback one line. Treating swipe-away as "send" matches what the reviewer saw: the toast said *Approved*, and only Undo says otherwise.
+
+**Trade-offs:**
+- Module-level state is global to the tab; tests reset it (`resetReviewOverlay`, `resetPendingApprovals`).
+- Focus after Undo needs a second `focus()` call: sonner returns focus to where it was before the toast as soon as focus leaves the toast, and the second call wins (commented in `approval-queue.tsx`).
+
+---
+
+## D-013: A limit warning always means the confirm dialog, with Cancel focused
+
+**Date:** 2026-10-27 · **Phase:** 3 (approval queue)
+
+**Decision:** A request whose `limitWarning` isn't ok (D-007) never uses the undo toast, whatever its amount. Approving it (button or `a`) opens the same AlertDialog as > 1,000.00 USDC, listing the breaches, with **Approve anyway**, which sends `acknowledgeLimitWarning: true`. In both variants the dialog opens with focus on **Cancel**, set explicitly in `onOpenAutoFocus` rather than relying on Radix's default, so an accidental Enter cancels. If the server answers 409 `LIMIT_WARNING` (the mandate changed after the screen loaded), the row is restored, the queue refetches and the dialog opens with the new breaches.
+
+**Why:** Approving past the current mandate is a deliberate exception and should take one explicit step, never a keystroke that turns into a send 5 seconds later. A checkbox in the panel was considered; it would put a second, different confirmation pattern in the same screen.
+
+**Trade-off:** One more click for warned items, even small ones.
+
+---
+
+## D-014: Sidebar waiting count shares the queue's query
+
+**Date:** 2026-10-27 · **Phase:** 3 (approval queue)
+
+**Decision:** The **Approvals** nav link shows the number waiting (design.md §6.0), with the accessible name "Approvals, 12 waiting" (visible number `aria-hidden`, words in an `sr-only` span). It uses `useWaitingCount()`, which reads the same `useApprovals()` query (`queryKeys.approvals()`) as the queue, minus the review overlay (D-012). `Providers` now wraps the whole `AppShell`, not just the page. No count while loading, after an error, or at 0.
+
+**Why:** One cache entry means one request per poll however many components read it, and the overlay makes the count drop the moment a reviewer acts and go back up on Undo or rollback.
+
+**Trade-offs:**
+- The approvals query now polls every 10 s on **every page** while the tab is visible (`refetchIntervalInBackground: false`; TanStack Query pauses it when the tab is hidden).
+- Also in this phase: `@tanstack/react-table` is pinned to v8 as PLAN.md §2 says (`pnpm add` picked v9, which has a different API), and shadcn's `destructive` button variant is solid with white text, per design.md §3.3.

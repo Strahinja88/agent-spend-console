@@ -239,6 +239,8 @@ All sketches are desktop (≥1280px) and use the mandates in §2.3. Mobile notes
   220px sidebar; active item = brand-muted bg + brand text + bold (not colour alone)
 ```
 
+The number next to **Approvals** is how many requests are waiting. The link's accessible name is "Approvals, 12 waiting" (the visible number is `aria-hidden`). It shares the queue's query and updates optimistically on approve/reject, and it's hidden while loading, after an error, or at 0 (D-014).
+
 There's no Payments item: PLAN.md has no payments list, only `/payments/[id]`, which is reached from a decision.
 
 Mobile (<768px): the sidebar collapses into a ☰ button in the top bar that opens a Sheet.
@@ -277,7 +279,7 @@ Every row below passes all hard rules for its agent and is above that agent's re
 
 The numbers fit the mandate: Ops Agent v3 had 300.00 USDC allowed earlier today. The 180.00 request (12 min ago) took committed spend to 480.00, and this 1,250.00 request takes it to 1,730.00, within both the 2,000.00 per-payment and 3,000.00 daily limits.
 
-Columns: Agent · Vendor · Amount (right) · Chain · Age · Trigger rule. Sortable: agent, amount, age. Filters: agent, chain.
+Columns: Agent · Vendor · Amount (right) · Chain · Age · Trigger rule. Sortable: agent, amount, age (default: age, newest first). Filters: agent, chain.
 
 **Approve, up to and including 1,000.00 USDC:** no dialog. The row leaves the queue at once, the selection moves to the next row, and a toast appears:
 
@@ -289,13 +291,15 @@ Columns: Agent · Vendor · Amount (right) · Chain · Age · Trigger rule. Sort
 ```
 
 - The toast stays for **5 s**. **The approve mutation is sent only when the toast closes on its own.** It's triggered from the toast's auto-close callback, not a separate timer, so pausing the toast (hover or keyboard focus, Sonner's default) also delays the send.
-- **Undo** cancels the send; the row returns to its sorted position and is reselected. Nothing reached the API.
+- **Undo** cancels the send; the row returns to its sorted position and is reselected. Nothing reached the API. Undo is the only way to cancel: swiping the toast away also sends (D-012).
 - If the mutation then fails: the row is restored and an error toast says "Couldn't approve 120.00 USDC to Weather API" with **Retry**.
 - Several approvals can be pending at once (one toast each). Rows with a pending approval stay hidden even if a poll returns them.
 - Navigating to another page inside the app sends pending approvals immediately. Closing the tab doesn't send them, so the request stays waiting (fails safe).
 - The toast region is `aria-live="polite"`, and Undo is a real button reachable with Tab.
 
-**Approve, above 1,000.00 USDC:** AlertDialog. On confirm the mutation is sent immediately (no undo toast), with optimistic removal and rollback on failure.
+**Approve, above 1,000.00 USDC:** AlertDialog. On confirm the mutation is sent immediately (no undo toast), with optimistic removal and rollback on failure. The dialog opens with focus on **Cancel**, so an accidental Enter never approves.
+
+**Approve with a limit warning** (any amount, D-007): the panel shows the breaches in a "Limit warning" note, and approving always opens the same AlertDialog with the breaches listed and **Approve anyway** (Cancel focused), which sends `acknowledgeLimitWarning: true`. No undo toast (D-013).
 
 ```
 ┌─ Approve 1,250.00 USDC? ───────────────────────┐
@@ -323,7 +327,7 @@ Columns: Agent · Vendor · Amount (right) · Chain · Age · Trigger rule. Sort
 └───────────────────────────────────────────────────┘
 ```
 
-When the switch is off, the list is shown dimmed with "Shortcuts are off".
+When the switch is off, the shortcut list in this dialog is dimmed (muted text colour, not opacity, so it stays AA) with "Shortcuts are off".
 
 States: skeleton table (panel hidden); EmptyState "Nothing waiting for approval" (action: "View recent decisions"); ErrorState with Retry. New items from polling are announced as "2 new requests waiting" (`aria-live="polite"`) and get a "New" badge, without stealing focus or moving the selection.
 

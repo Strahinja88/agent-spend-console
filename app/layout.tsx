@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import "./globals.css"
+import { Providers } from "./providers"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,7 +41,10 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <ThemeProvider>
           <TooltipProvider>
-            <AppShell>{children}</AppShell>
+            {/* Around the shell, not just the page: the sidebar reads the approvals query */}
+            <Providers>
+              <AppShell>{children}</AppShell>
+            </Providers>
           </TooltipProvider>
         </ThemeProvider>
       </body>

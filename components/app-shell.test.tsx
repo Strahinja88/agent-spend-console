@@ -1,11 +1,22 @@
-import { render, screen, within } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { render as rtlRender, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { AppShell } from "@/components/app-shell"
+import { ApiReadyContext } from "@/lib/api/api-ready"
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/approvals",
 }))
+
+// The sidebar reads the approvals query; keep it idle here (no API in this test)
+function render(ui: React.ReactNode) {
+  return rtlRender(
+    <QueryClientProvider client={new QueryClient()}>
+      <ApiReadyContext value={false}>{ui}</ApiReadyContext>
+    </QueryClientProvider>,
+  )
+}
 
 describe("AppShell", () => {
   it("renders a skip link to the main content", () => {
