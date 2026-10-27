@@ -32,10 +32,12 @@ export default function RootLayout({
 }>) {
   return (
     // next-themes sets the theme class on <html> before hydration
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="font-sans antialiased">
         <ThemeProvider>
           <TooltipProvider>
             <AppShell>{children}</AppShell>
