@@ -291,3 +291,22 @@ Short records of non-obvious choices and their trade-offs, newest last. IDs are 
 **Trade-offs:**
 - The code blocks are tab stops on desktop too, where they rarely scroll.
 - The e2e flow moves the mouse off the toast after approving, because a hovered toast pauses and never sends. Check this on a real phone: a tap may leave a hover state under the toast.
+
+---
+
+## D-024: The app waits for the mock worker and reconnects it when a request misses
+
+**After phase 6.** Requests to `/api/*` sometimes reached Next.js and came back as its HTML 404 page. The app read that as "not found" and every screen broke. MSW's worker keeps the pages it mocks in an in-memory set (`activeClientIds`). When the browser stops an idle worker, the set is lost and requests pass straight through. A hard reload (Shift+Reload) has a similar effect: the page loads without a service worker.
+
+The fix has four parts:
+- **Page content waits for the worker.** `MockReady` in the layout mounts pages only once `worker.start()` has resolved. The shell renders straight away.
+- **A hard reload gets one more reload.** If the page still has no controller after start, it reloads once. A `sessionStorage` flag stops a loop, and a controlled load clears the flag.
+- **The fetch layer reconnects.** Every mock response is JSON, so `fetchJson` reads a non-JSON answer as a request that missed the mock. It re-sends MSW's `MOCK_ACTIVATE` message (`reactivateWorker`) and retries once. If that fails too, it throws `API_UNAVAILABLE` (503), and screens show their error state with Retry.
+- **`isNotFound` checks our own `NOT_FOUND` code.** A 404 from anywhere else no longer shows a not-found screen.
+
+**Why not drop the service worker?** An in-memory adapter behind `lib/api` would avoid all of this. It would also take requests out of the Network tab and stop the demo from showing a real HTTP boundary. Kept MSW for now; the adapter is the fallback if this proves flaky.
+
+**Trade-offs:**
+- `reactivateWorker` relies on MSW's internal message name (`MOCK_ACTIVATE`/`MOCKING_ENABLED`). An MSW upgrade could change it; `e2e/mock-recovery.spec.ts` would catch that.
+- Retrying a mutation is safe only because a request that missed the mock never changed any state.
+- A hard reload costs one extra page load.

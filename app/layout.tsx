@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 
 import { AppShell } from "@/components/app-shell"
+import { MockReady } from "@/components/mock-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import "./globals.css"
@@ -43,7 +44,9 @@ export default function RootLayout({
           <TooltipProvider>
             {/* Around the shell, not just the page: the sidebar reads the approvals query */}
             <Providers>
-              <AppShell>{children}</AppShell>
+              <AppShell>
+                <MockReady>{children}</MockReady>
+              </AppShell>
             </Providers>
           </TooltipProvider>
         </ThemeProvider>
