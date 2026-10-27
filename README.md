@@ -6,8 +6,8 @@ A portfolio demo of a finance console for AI-agent payments. AI agents ask to pa
 - **Decision detail** (`/decisions/[id]`): the rule outcome in plain language, the mandate that applied, and the ES256-signed verdict. You can verify it in the browser, and a **Tamper** switch shows the check failing.
 - **Payment timeline** (`/payments/[id]`): from request to onchain confirmation, reading **real USDC testnet transactions** on Base Sepolia and Solana devnet.
 
-**Live demo:** https://agent-spend-console.vercel.app
-![CI](https://github.com/<tvoj-username>/agent-spend-console/actions/workflows/ci.yml/badge.svg)
+**Live demo:** https://agent-spend-console-demo.vercel.app
+![CI](https://github.com/Strahinja88/agent-spend-console/actions/workflows/ci.yml/badge.svg)
 
 ![Approval queue](docs/screenshots/approvals.png)
 
