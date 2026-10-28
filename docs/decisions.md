@@ -118,6 +118,8 @@ Short records of non-obvious choices and their trade-offs, newest last. IDs are 
 
 ## D-011: The mock API runs in every build, production included
 
+> **Changed by D-025:** the browser no longer uses MSW's service worker; `lib/api` calls the mock handlers in memory. The rest of this entry still holds.
+
 **Phase 3.** MSW's service worker starts in the browser in development and in the deployed build. `MockProvider` loads it with `next/dynamic({ ssr: false })` and exposes an "API ready" flag. Queries wait for it.
 
 **Why:** There's no backend, so without MSW the deployed demo would have no data. `ssr: false` is required because `msw/browser` has no Node build.
@@ -267,7 +269,7 @@ Short records of non-obvious choices and their trade-offs, newest last. IDs are 
 - e2e runs locally, not in CI.
 
 **Why:**
-- A production build is what Vercel serves, so every run also proves that MSW and its worker work in production.
+- A production build is what Vercel serves, so every run also proves that the mock API works in production.
 - A separate build folder never collides with a running dev server.
 - Random failures and public RPCs would make the suite flaky.
 
@@ -296,6 +298,8 @@ Short records of non-obvious choices and their trade-offs, newest last. IDs are 
 
 ## D-024: The app waits for the mock worker and reconnects it when a request misses
 
+> **Superseded by D-025.** Kept for the history: the worker, `MockReady`, `reactivateWorker` and `API_UNAVAILABLE` are gone.
+
 **After phase 6.** Requests to `/api/*` sometimes reached Next.js and came back as its HTML 404 page. The app read that as "not found" and every screen broke. MSW's worker keeps the pages it mocks in an in-memory set (`activeClientIds`). When the browser stops an idle worker, the set is lost and requests pass straight through. A hard reload (Shift+Reload) has a similar effect: the page loads without a service worker.
 
 The fix has four parts:
@@ -310,3 +314,22 @@ The fix has four parts:
 - `reactivateWorker` relies on MSW's internal message name (`MOCK_ACTIVATE`/`MOCKING_ENABLED`). An MSW upgrade could change it; `e2e/mock-recovery.spec.ts` would catch that.
 - Retrying a mutation is safe only because a request that missed the mock never changed any state.
 - A hard reload costs one extra page load.
+
+---
+
+## D-025: The browser calls the mock API in memory; MSW is for tests only
+
+**After phase 6.** D-024's recovery worked, but requests still sometimes reached Next.js and got a 404 before the retry. The MSW service worker is gone from the app:
+- `mocks/api.ts` holds the routes as plain `Request → Response` functions (`handleApiRequest`). Same seed, same 300–800 ms latency, same ~10% mutation failures.
+- `fetchJson` sends through a transport. `installMockApi` (`lib/api/mock-transport.ts`, called from `app/providers.tsx`) sets it to `handleApiRequest`. The handlers and the seed load on the first request.
+- Requests and responses are still real `Request`/`Response` objects, so bodies go through JSON and amounts through the bigint string codec (D-010), as over HTTP.
+- Tests keep `fetch`, and `mocks/handlers.ts` puts `handleApiRequest` behind MSW (`msw/node`). Tests can still log calls and override single routes with `server.use`.
+- Removed: `public/mockServiceWorker.js`, the worker startup and reload logic, `MockReady` and the "API ready" flag, `reactivateWorker` and `API_UNAVAILABLE`.
+- A returning visitor may still have the old worker registered; `installMockApi` unregisters it.
+
+**Why:** A service worker isn't reliable as the demo's only backend. A hard reload skips it, and the browser can stop it at any time, losing its list of mocked pages. Each case sent requests past the mock. In memory, there's nothing that can be bypassed or stopped.
+
+**Trade-offs:**
+- API calls no longer appear in the Network tab, so the demo shows no real HTTP boundary.
+- e2e can't wait for an `/approve` response. It waits for the undo toast to close, then checks the result on screen. `e2e/mock-api.spec.ts` checks that no `/api` request reaches the network, through a hard reload.
+- Unit tests still use MSW, so the browser path (`installMockApi`) is covered only by e2e.

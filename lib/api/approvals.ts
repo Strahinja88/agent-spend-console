@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
 
-import { useApiReady } from "./api-ready"
 import { fetchJson, postJson } from "./client"
 import { approvalsResponse, reviewResponse, type QueueItem } from "./contract"
 import { queryKeys } from "./query-keys"
@@ -41,11 +40,9 @@ export function rejectDecision(decisionId: string, reason: string) {
  * query, so there is one request per poll. No polling while the tab is hidden.
  */
 export function useApprovals() {
-  const ready = useApiReady()
   return useQuery({
     queryKey: queryKeys.approvals(),
     queryFn: fetchApprovals,
-    enabled: ready,
     refetchInterval: POLL_MS,
     refetchIntervalInBackground: false,
   })

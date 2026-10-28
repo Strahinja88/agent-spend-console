@@ -3,18 +3,18 @@ import { render as rtlRender, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { AppShell } from "@/components/app-shell"
-import { ApiReadyContext } from "@/lib/api/api-ready"
+import { setApiTransport } from "@/lib/api/client"
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/approvals",
 }))
 
-// The sidebar reads the approvals query; keep it idle here (no API in this test)
+// The sidebar reads the approvals query; keep it pending here (no API in this test)
+setApiTransport(() => new Promise(() => {}))
+
 function render(ui: React.ReactNode) {
   return rtlRender(
-    <QueryClientProvider client={new QueryClient()}>
-      <ApiReadyContext value={false}>{ui}</ApiReadyContext>
-    </QueryClientProvider>,
+    <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>,
   )
 }
 

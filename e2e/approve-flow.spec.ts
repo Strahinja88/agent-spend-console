@@ -36,17 +36,13 @@ test("approve, undo, approve again, then verify the decision and open its paymen
     await expect(row).toHaveAttribute("aria-selected", "true")
   }
 
-  // Approve again and let the toast close: that sends it
-  const approved = page.waitForResponse(
-    (r) => r.url().includes("/approve") && r.request().method() === "POST",
-    { timeout: 15_000 },
-  )
+  // Approve again and let the toast close: that sends it. The mock API is
+  // in memory (D-025), so the Decisions list below proves it was recorded.
   await panel.getByRole("button", { name: /^Approve/ }).click()
   // The toast appears under the pointer where Approve was, and hovering
   // pauses it (sonner). Move away so it can close on its own.
   await page.mouse.move(0, 0)
-  expect((await approved).ok()).toBe(true)
-  await expect(toast).toHaveCount(0)
+  await expect(toast).toHaveCount(0, { timeout: 15_000 })
   await expect(row).toHaveCount(0)
 
   // Decisions, through the app's own navigation

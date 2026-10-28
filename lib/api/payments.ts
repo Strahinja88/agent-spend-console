@@ -6,7 +6,6 @@ import { isRetryableChainError } from "@/lib/chain/errors"
 import { isFinal, isSettling, type OnchainTx } from "@/lib/chain/types"
 import type { Chain, Payment } from "@/lib/domain/types"
 
-import { useApiReady } from "./api-ready"
 import { fetchJson } from "./client"
 import { paymentDetailResponse } from "./contract"
 import { queryKeys } from "./query-keys"
@@ -17,7 +16,6 @@ const BLOCK_NUMBER_REFETCH_MS = 30_000
 const MAX_RETRIES = 3
 
 export function usePayment(id: string) {
-  const ready = useApiReady()
   return useQuery({
     queryKey: queryKeys.payment(id),
     queryFn: () =>
@@ -25,7 +23,6 @@ export function usePayment(id: string) {
         `/api/payments/${encodeURIComponent(id)}`,
         paymentDetailResponse,
       ),
-    enabled: ready,
   })
 }
 

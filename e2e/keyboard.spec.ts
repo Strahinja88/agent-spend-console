@@ -89,12 +89,11 @@ test("approve flow works with the keyboard only", async ({ page }) => {
   await expect(row).toHaveAttribute("aria-selected", "true")
 
   // a again; the toast closing on its own sends it
-  const approved = page.waitForResponse(
-    (r) => r.url().includes("/approve") && r.request().method() === "POST",
-    { timeout: 15_000 },
-  )
   await page.keyboard.press("a")
-  expect((await approved).ok()).toBe(true)
+  await expect(
+    page.getByText("Approved · 120.00 USDC to Weather API"),
+  ).toHaveCount(0, { timeout: 15_000 })
+  await expect(page.getByText(/^Couldn't approve/)).toHaveCount(0)
   await expect(row).toHaveCount(0)
   await expect(focused(page)).toHaveAttribute("aria-selected", "true")
 

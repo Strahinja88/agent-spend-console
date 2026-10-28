@@ -21,7 +21,8 @@ const api = setupMockApi()
 // limit warning (D-007).
 
 function setup() {
-  vi.useFakeTimers({ shouldAdvanceTime: true })
+  // The page clock starts where the mock API's does, so "today" is the anchor day
+  vi.useFakeTimers({ now: mockClock.now, shouldAdvanceTime: true })
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
   renderWithProviders(<ApprovalQueue />)
   return user

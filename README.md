@@ -35,7 +35,7 @@ A portfolio demo of a finance console for AI-agent payments. AI agents ask to pa
 | Framework | Next.js 15 (App Router), React 19, TypeScript (strict) |
 | Data | TanStack Query v5, TanStack Table v8, Zod 4 |
 | UI | Tailwind CSS v4, shadcn/ui (Radix), next-themes, sonner |
-| Mock API | MSW, in the browser, in every build including production |
+| Mock API | In-memory handlers in the browser, in every build including production; MSW in tests |
 | Signed verdicts | jose (ES256 JWT, JWKS) |
 | Onchain (read-only) | viem on Base Sepolia, @solana/web3.js on devnet |
 | Money | `bigint` minor units, never floats |
@@ -64,7 +64,7 @@ Optional `.env.local` (see `.env.example`): `NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL` a
 
 ## How the demo works
 
-- There is no backend. MSW serves a deterministic seed from the browser: 6 agents, ~200 requests over 30 days, 12 waiting for review. A reload starts over.
+- There is no backend. The mock API runs in the page's memory and serves a deterministic seed: 6 agents, ~200 requests over 30 days, 12 waiting for review. A reload starts over.
 - Seed times follow the current day, so the demo never looks stale.
 - About 10% of approve and reject requests fail on purpose, to show rollback and retry.
 - Three seed payments point at real USDC transfers found on Base Sepolia and Solana devnet. Those transfers happened between unknown testnet wallets. The "Research Bot wallet" and "Weather API wallet" labels are a demo fiction.
@@ -77,9 +77,9 @@ Full records with trade-offs are in [docs/decisions.md](docs/decisions.md). The 
 - **Approval re-checks the current mandate** (D-007, D-013): if limits were lowered while a request waited, approving needs an explicit "Approve anyway".
 - **Undo before send** (D-012): approvals are sent when the undo toast closes. Rows hide through a small overlay, so polling can't bring them back.
 - **Verdicts signed with a per-load key** (D-015, D-016): the key's thumbprint is its id, the private half never leaves memory, and a verdict covers the rule decision only.
-- **The mock API ships to production** (D-011): it's the demo's only backend.
+- **The mock API ships to production** (D-011, D-025): it's the demo's only backend, called in memory rather than through a service worker, which a hard reload or an idle browser could bypass.
 - **Onchain reads are lazy and cached by finality** (D-020): viem and web3.js load only on the payment page. Settled transactions are never fetched twice.
-- **e2e against a production build** (D-022): every e2e run also proves the deployed build and its service worker work.
+- **e2e against a production build** (D-022): every e2e run also proves the deployed build and its in-memory mock API work.
 
 ## About
 

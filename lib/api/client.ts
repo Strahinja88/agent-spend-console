@@ -5,11 +5,8 @@ import { errorBody, type ApiErrorCode } from "./contract"
 export class ApiError extends Error {
   constructor(
     readonly status: number,
-    /**
-     * "UNKNOWN" when the body isn't one of ours; "API_UNAVAILABLE" when the
-     * response isn't JSON at all, i.e. the mock API didn't answer (D-024).
-     */
-    readonly code: ApiErrorCode | "UNKNOWN" | "API_UNAVAILABLE",
+    /** "UNKNOWN" when the body isn't one of ours. */
+    readonly code: ApiErrorCode | "UNKNOWN",
     message: string,
   ) {
     super(message)
@@ -17,14 +14,17 @@ export class ApiError extends Error {
   }
 }
 
-/** Reconnects the mock API; resolves true if it's worth sending the request again. */
-type Recovery = () => Promise<boolean>
+/** Sends one request and returns the response, like `fetch`. */
+export type ApiTransport = (request: Request) => Promise<Response>
 
-let recover: Recovery | undefined
+let transport: ApiTransport = (request) => fetch(request)
 
-/** Set by the browser mock worker, so a request that missed it can try again (D-024). */
-export function setApiRecovery(fn: Recovery | undefined) {
-  recover = fn
+/**
+ * Replaces `fetch` as the way requests are sent. The app installs the
+ * in-memory mock API (D-025); tests keep `fetch`, which MSW intercepts.
+ */
+export function setApiTransport(next: ApiTransport) {
+  transport = next
 }
 
 // Relative paths resolve against the page in the browser, and against a
@@ -33,38 +33,21 @@ function resolve(path: string): string {
   return new URL(path, globalThis.location?.href ?? "http://localhost").href
 }
 
-// Every answer from the mock API is JSON, errors included. Anything else
-// (Next.js's HTML 404 page) means the request went past the mock.
-function isJson(response: Response): boolean {
-  return !!response.headers.get("content-type")?.includes("application/json")
-}
-
 /**
  * Fetches JSON and decodes it with `schema`, so amounts arrive as bigint.
  * Non-2xx responses throw ApiError; a body that doesn't match throws ZodError.
- * A non-JSON response reconnects the mock API and is sent once more; if that
- * fails too it throws API_UNAVAILABLE, never a 404.
  */
 export async function fetchJson<S extends z.ZodType>(
   path: string,
   schema: S,
   init?: RequestInit,
 ): Promise<z.output<S>> {
-  const send = () =>
-    fetch(resolve(path), {
+  const response = await transport(
+    new Request(resolve(path), {
       ...init,
       headers: { Accept: "application/json", ...init?.headers },
-    })
-
-  let response = await send()
-  // Safe to repeat a mutation: it never reached the mock, so nothing changed
-  if (!isJson(response) && recover && (await recover())) {
-    response = await send()
-  }
-  if (!isJson(response)) {
-    throw new ApiError(503, "API_UNAVAILABLE", "The demo API isn't responding.")
-  }
-
+    }),
+  )
   const body: unknown = await response.json().catch(() => undefined)
 
   if (!response.ok) {

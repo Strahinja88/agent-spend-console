@@ -3,9 +3,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useState } from "react"
 
-import { MockProvider } from "@/components/mock-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { isNotFound } from "@/lib/api/client"
+import { installMockApi } from "@/lib/api/mock-transport"
+
+// The mock API is the demo's only backend, so it runs in every build,
+// production included (D-011). Installed before any query can run (D-025).
+installMockApi()
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -23,11 +27,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <MockProvider>
-      <QueryClientProvider client={queryClient}>
-        {children}
-        <Toaster position="bottom-right" />
-      </QueryClientProvider>
-    </MockProvider>
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <Toaster position="bottom-right" />
+    </QueryClientProvider>
   )
 }

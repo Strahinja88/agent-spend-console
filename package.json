@@ -62,10 +62,5 @@
   "packageManager": "pnpm@12.15.0",
   "engines": {
     "node": ">=24"
-  },
-  "msw": {
-    "workerDirectory": [
-      "public"
-    ]
   }
 }

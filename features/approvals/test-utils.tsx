@@ -43,14 +43,16 @@ export function setupMockApi() {
     calls.length = 0
 
     const realFetch = globalThis.fetch
+    // lib/api sends a Request; read its body from a copy
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = new URL(input instanceof Request ? input.url : String(input))
+      const request = new Request(input, init)
+      const body = await request.clone().text()
       calls.push({
-        method: init?.method ?? "GET",
-        path: url.pathname,
-        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        method: request.method,
+        path: new URL(request.url).pathname,
+        body: body ? JSON.parse(body) : undefined,
       })
-      return realFetch(input, init)
+      return realFetch(request)
     })
   })
   afterEach(() => {
